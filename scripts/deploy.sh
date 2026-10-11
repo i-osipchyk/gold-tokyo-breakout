@@ -4,7 +4,7 @@
 #   scripts/deploy.sh demo            # plan + apply (Terraform asks before changing anything)
 #   scripts/deploy.sh demo --plan     # stop after the plan
 #
-# The stack goes to $AWS_REGION (required).
+# The stack goes to $AWS_REGION (required; from the environment or .env).
 #
 # Steps: state bucket (once) -> terraform init -> ECR repo -> docker build/push (arm64, tagged
 # with the git sha) -> early-close one-off schedules from data/early_close.yaml -> plan/apply
@@ -13,8 +13,14 @@ set -euo pipefail
 
 ENV="${1:?usage: scripts/deploy.sh <demo|live> [--plan]}"
 MODE="${2:-apply}"
-REGION="${AWS_REGION:?set AWS_REGION to the region to deploy to (e.g. eu-west-1)}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# AWS_REGION from the environment, else from .env (that one key only: the secrets stay out of
+# this shell).
+if [[ -z "${AWS_REGION:-}" && -f "$ROOT/.env" ]]; then
+  AWS_REGION="$(sed -n 's/^AWS_REGION=["'\'']\{0,1\}\([^"'\'']*\)["'\'']\{0,1\}$/\1/p' "$ROOT/.env" | tail -1)"
+fi
+export AWS_REGION="${AWS_REGION:?set AWS_REGION (environment or .env) to the region to deploy to}"
+REGION="$AWS_REGION"
 TF="terraform -chdir=$ROOT/infra"
 
 case "$ENV" in

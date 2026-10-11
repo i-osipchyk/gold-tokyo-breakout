@@ -22,6 +22,8 @@ from collections import Counter
 from datetime import date, timedelta
 from pathlib import Path
 
+import dotenv
+
 from gtb.config import CALENDAR, load_early_closes
 from gtb.records import DayRecord
 
@@ -129,6 +131,7 @@ def main() -> None:
     parser.add_argument("--hermes-dir", type=Path,
                         default=Path(os.environ.get("HERMES_DIR", ROOT.parent / "hermes")))
     args = parser.parse_args()
+    dotenv.load_dotenv(ROOT / ".env")             # AWS_REGION, if not exported
 
     root = ROOT / "local" if args.local else sync(args.env)
     records = [r for r in load_records(root, args.env) if r.inputs is not None]
