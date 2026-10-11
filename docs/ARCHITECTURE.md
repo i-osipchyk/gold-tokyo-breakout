@@ -42,7 +42,7 @@ Instrument XAUUSD, 100 oz/lot, volume step 0.01 lot, tick 0.01.
 | Tokyo window | bars with open time 00:00 ≤ t < 09:00 (last bar: 08:55) |
 | valid range | weekday and ≥ 50 bars in the window |
 | yardstick | median of the previous 20 valid Tokyo ranges, ≥ 15 required, today excluded |
-| ATR | Wilder ATR(20) on 4h bars rebuilt from 1h (+ forming bar from 5m), buckets anchored to 17:00 America/New_York (17, 21, 01, 05, 09, 13 NY), **including the forming bar**, evaluated once at the plan time |
+| ATR | Wilder ATR(20) on 4h bars rebuilt from 1h, buckets anchored to 17:00 America/New_York (17, 21, 01, 05, 09, 13 NY), **sealed bars only** (a bucket is sealed once its last 5m bar has closed), evaluated once at the plan time. After the 08:55 bar: summer includes the 05:00–09:00 UTC bucket, winter ends with 02:00–06:00 UTC |
 
 ### Day logic
 
@@ -60,8 +60,10 @@ Instrument XAUUSD, 100 oz/lot, volume step 0.01 lot, tick 0.01.
 3. Each order can fill once. Because `d < range + 2·off`, a position's SL is always reached before
    the opposite entry, so at most one position is open at a time.
 4. **20:50:05 — flatten.** Market-close any open position; nothing else may remain.
-5. **Early-close days** (CME holidays, see `data/early_close.yaml`): flatten at the listed time;
-   expiry = min(20:05, flatten − 5 min).
+5. **Early-close days** (CME holidays, ~9–10 a year, see `data/early_close.yaml`, which lists the
+   open time `L` of the session's last 5m bar): the flatten fills at `min(20:50, L)` — the same
+   convention as a summer Friday, whose last bar is 20:50 — and orders expire two bars before `L`
+   (the last bar that can fill opens at `L − 10 min`).
 
 No take-profit, no trailing, no other exits.
 
@@ -71,6 +73,12 @@ No take-profit, no trailing, no other exits.
 
 The spec's reference run `2fe13c7c79f3ee20` is **not** the forward-test reference. The reference is
 the Hermes static variant (`gold_tokyo_breakout_v2_static`), which encodes exactly the rules above.
+
+**Spec erratum (not a difference):** spec §2 says the ATR includes the forming 4h bar. The reference
+code never set an indicator mode, so Hermes used its default `latest_confirmed` — **sealed bars
+only** — and the spec's §7.1 trades reproduce exactly that way (2018-01-24: entry 1348.478, SL
+1343.961, 2.27 lots; with the forming bar it would be SL 1343.835, 2.20 lots). The forward test uses
+sealed bars, like the evidence.
 
 | Spec (§2–3) | Forward test | Why |
 |---|---|---|
@@ -88,7 +96,7 @@ the Hermes static variant (`gold_tokyo_breakout_v2_static`), which encodes exact
 
 ```
                      EventBridge Scheduler (UTC cron, minute granularity)
-          09:00            09:10          20:50          20:53, 20:56
+          09:00            09:10          20:50          20:51, 20:52
             │                │              │                 │
             ▼                ▼              ▼                 ▼
      ┌────────────┐  ┌────────────┐  ┌────────────┐   ┌────────────┐
@@ -117,8 +125,8 @@ the variant's per-day plans for 2018–2026.
 
 - `tokyo_range(bars_5m, day) -> Range | None` — high, low, bar count, validity.
 - `range_history(bars_5m, day) -> list[float]` — previous valid ranges.
-- `atr_4h(bars_1h, bars_5m, at) -> float` — rebuild 4h buckets (17:00 NY anchor, DST via zoneinfo),
-  forming bar included, Wilder(20). Must match Hermes' ATR seeding; history fetched long enough
+- `atr_4h(bars_1h, at) -> float` — rebuild 4h buckets (17:00 NY anchor, DST via zoneinfo),
+  sealed buckets only, Wilder(20). Must match Hermes' ATR seeding; history fetched long enough
   (≥ 200 4h bars) that the seed is irrelevant.
 - `plan_day(...) -> DayPlan` — gate decision with all inputs, the two orders (entry, SL, shortened
   flag, lots, expiry) or the reason for no trade.
@@ -149,9 +157,15 @@ duplicate or retried invocation is harmless.
 | `morning` | fires 09:00, sleeps to **09:00:10** | fetch bars (5m ~45 days, 1h ~90 days) and equity; wait until the 08:55 bar is closed, **retrying every 15 s until 09:05:00**; `plan_day`; if today's orders already exist (by `clientOrderId`) do nothing; place orders; write the morning part of the DayRecord; Telegram summary with layer-1 inputs | cutoff passed → alert, no orders (missed day, no risk) |
 | `heartbeat` | 09:10 | alert if today's morning record is missing in S3 (catches a run that never started) | — |
 | `eod` | fires 20:50, sleeps to **20:50:05** (earlier on early-close days) | cancel any `gtb` pending orders; market-close any `gtb` position with retries; read the day's deals and tick data; complete the DayRecord; Telegram summary | alert on any error |
-| `watchdog` | 20:53, 20:56 | if any `gtb` position is open → close it and **alert** | alert |
+| `watchdog` | two independent invocations, **20:51 and 20:52** | every 30 s until **20:54:00**: if any `gtb` position is open → close it (retrying) and **alert** at once | alert |
 
-Friday's summer close is 21:00 UTC: the watchdogs leave a few minutes to act manually.
+**Close timing.** The market can close as early as **20:55 UTC** (every summer Friday's last bar
+is 20:50), so everything after the flatten happens inside those 5 minutes: `eod` sends the close at
+20:50:05 and retries; two watchdogs (separate invocations, so one failing to start doesn't matter)
+re-check every 30 s from 20:51 until 20:54:00, a minute before the earliest close. The first failed
+close attempt alerts immediately, leaving ~4 minutes to close by hand. On early-close days the same
+offsets apply to that day's flatten time `F` (`eod` at F+5 s, watchdogs F+1 and F+2 min, last check
+F+4 min), via one-off schedules generated from `data/early_close.yaml`.
 
 Alerts (Telegram): any run error, cutoff missed, missing heartbeat, `skipped_min_size`, order
 rejected, watchdog had to close something, token refresh failure.
@@ -225,8 +239,7 @@ Daily during demo, weekly in live. Hermes stays in Hermes; nothing of it runs in
 Each run recomputes from the broker; no state is carried between runs.
 
 - **5m bid trendbars**, ~45 calendar days back → today's Tokyo range and the last 20 valid ranges.
-- **1h bid trendbars**, ~90 calendar days back + today's 5m bars → 4h buckets and ATR (forming bar
-  included). cTrader's native 4h bars are not used (different anchoring; Hermes ADR-0006).
+- **1h bid trendbars**, ~90 calendar days back → sealed 4h buckets and ATR. cTrader's native 4h bars are not used (different anchoring; Hermes ADR-0006).
 - **Account equity** at plan time (flat, so equity = balance).
 - **Deals** and **tick data** (bid and ask) at EOD for fills and spread at fill.
 
@@ -239,7 +252,7 @@ Each run recomputes from the broker; no state is carried between runs.
 | morning run fails or misses 09:05:00 cutoff | no trade that day | alert; heartbeat catches a run that never started |
 | morning run fires twice | duplicate orders | idempotent by `clientOrderId` |
 | 08:55 bar not yet available at 09:00:10 | — | retry every 15 s to 09:05:00 |
-| **flatten fails** | position held overnight (Friday: over the weekend) | retries in `eod`, watchdogs at 20:53 and 20:56, alert → manual close |
+| **flatten fails** | position held overnight (Friday: over the weekend) | retries in `eod`, two watchdogs re-checking every 30 s from 20:51 to 20:54, alert on the first failed attempt → manual close before 20:55 |
 | token expired / refresh fails | runs can't trade | alert on refresh failure, well before expiry |
 | broker rejects an order (margin, invalid level) | no trade | alert; recorded |
 | size floors below 0.01 lot | no trade | `skipped_min_size` + alert; fund the account so it is rare |
@@ -307,7 +320,7 @@ Two clocks:
 
 | Rule | Measured on | Trigger | Action |
 |---|---|---|---|
-| Drawdown | edge clock | cumulative drawdown in R > the variant's Monte Carlo worst drawdown in R (computed from the variant's per-trade R before going live; expected ~50–60 R) | stop the test |
+| Drawdown | edge clock | cumulative drawdown in R > the variant's Monte Carlo worst drawdown in R (**−47.2 R**, see `docs/REFERENCE.md`) | stop the test |
 | Expectancy | edge clock | after ≥ 100 trades, mean R < −0.10 | stop the test |
 | Execution | execution clock | rolling 20-trade mean of (live R − replay R) < −0.05 R | pause, fix, resume (clock keeps running) |
 | Money stop | live account | equity < 85% of the starting live balance | stop |

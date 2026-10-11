@@ -8,13 +8,17 @@ where marked as parallel.
 
 ## Phase 0 — Scaffolding
 
-- [ ] `uv init` a Python 3.12 package `gtb` (src layout); dev deps: pytest, ruff, mypy.
-- [ ] Runtime deps: `ctrader-open-api` (protobuf messages only), `protobuf`, `boto3`, `httpx`,
+- [x] `uv init` a Python 3.12 package `gtb` (src layout); dev deps: pytest, ruff, mypy.
+- [x] Runtime deps: `ctrader-open-api` (protobuf messages only), `protobuf`, `boto3`, `httpx`,
       `pyyaml`. Keep pandas out of the Lambda image.
-- [ ] `ruff` and `pytest` configs; empty package skeleton matching ARCHITECTURE §10.
-- [ ] `data/early_close.yaml` with 2026–2027 CME early-close dates and flatten times.
+- [x] `ruff` and `pytest` configs; empty package skeleton matching ARCHITECTURE §10.
+- [x] `data/early_close.yaml` with 2026–2027 CME early-close dates and flatten times.
 
 **Exit:** `uv run pytest` and `uv run ruff check .` pass on the empty skeleton.
+
+*Done 2026-10-11.* ruff clean; pytest has no tests yet (exit 5) — the first come in Phase 2.
+`data/early_close.yaml` holds the past dates (from Phase 1); `future` is filled from
+Pepperstone's holiday notices.
 
 ---
 
@@ -23,7 +27,7 @@ where marked as parallel.
 Follow Hermes' own `CLAUDE.md` (use `.venv/bin/hermes`, always pass `--note`, consult
 `hermes runs` first, `pytest` + `ruff` gates).
 
-- [ ] `strategies/misc/gold_tokyo_breakout_v2_static.py`, derived from
+- [x] `strategies/misc/gold_tokyo_breakout_v2_static.py`, derived from
       `gold_tokyo_breakout_v2_flat.py`, implementing ARCHITECTURE §2 exactly:
   - orders placed **while processing the 08:55 bar**, after it updates the range (earliest fill
     on the 09:00 bar), once per day, never re-placed;
@@ -33,18 +37,20 @@ Follow Hermes' own `CLAUDE.md` (use `.venv/bin/hermes`, always pass `--note`, co
   - within one bar, a position's SL is processed **before** the opposite entry fills;
   - flatten as `_flat` (close sent at 20:45, filled 20:50 open);
   - early-close calendar: flatten before the early close (same dates as `data/early_close.yaml`).
-- [ ] Per-day diagnostics export (one row per weekday): Tokyo high/low, bars, history length,
+- [x] Per-day diagnostics export (one row per weekday): Tokyo high/low, bars, history length,
       median, ATR at plan time, gate decision, both order levels, `d`, shortened flag, risk %.
       This becomes the core's test fixture.
-- [ ] Run 2018-01-01 → 2026-08-06, $100k, 1%, full costs. `hermes analyze <key>`.
-- [ ] Check every threshold in ARCHITECTURE §9.1 against `2fe13c7c79f3ee20`, including the
+- [x] Run 2018-01-01 → 2026-08-06, $100k, 1%, full costs. `hermes analyze <key>`.
+- [x] Check every threshold in ARCHITECTURE §9.1 against `2fe13c7c79f3ee20`, including the
       same-day/same-side overlap (script compares the two trade lists).
-- [ ] Compute the variant's Monte Carlo worst drawdown **in R** (1,000 shuffles of per-trade R,
+- [x] Compute the variant's Monte Carlo worst drawdown **in R** (1,000 shuffles of per-trade R,
       additive) for the live drawdown rule.
 
 **Exit (pass):** all thresholds met → record run key, freeze date (= **edge clock start**) and the
 R drawdown threshold in `docs/REFERENCE.md`; export the per-day diagnostics and trade list to
 `tests/fixtures/`.
+*Passed 2026-10-11: run `92974ddaae48e824`, all six criteria — see `docs/REFERENCE.md`.*
+
 **Exit (fail):** stop and revisit with the user; the agreed fallback is the 5-minute exact-parity
 design judged against `2fe13c7c`. Don't tune the variant.
 
@@ -56,7 +62,7 @@ Red-green against Hermes fixtures. No I/O in `gtb.core`.
 
 - [ ] Time helpers: UTC day boundaries, NY 17:00 anchor with DST, weekday checks.
 - [ ] `tokyo_range` and `range_history` (≥ 50 bars, ≥ 15 history, median of last 20).
-- [ ] 4h bucketing from 1h + forming bar from 5m; Wilder ATR(20). Match Hermes' seeding — read
+- [ ] 4h bucketing from 1h, sealed buckets only; Wilder ATR(20). Match Hermes' seeding — read
       `hermes.indicators` ATR before writing it.
 - [ ] `plan_day`: gate, levels, `d`/shortened flag, lots (floor to 0.01; skip below), expiry,
       early-close adjustments, `reason` codes.
@@ -94,7 +100,8 @@ bars for an overlapping week.
 - [ ] `alerts`: Telegram send; message formats for the morning summary, EOD summary, alerts.
 - [ ] Handlers: `morning` (sleep to 09:00:10, wait for 08:55 bar with 15 s retries to 09:05:00,
       idempotent placement), `heartbeat`, `eod` (sleep to 20:50:05, cancel, close with retries,
-      deals + tick-data spread, record, summary), `watchdog`.
+      deals + tick-data spread, record, summary), `watchdog` (from F+1/F+2 min, check every
+      30 s until F+4 min).
 - [ ] Handler tests with fake broker / S3 / Telegram (time injected, no sleeping in tests).
 - [ ] Local runner `scripts/run_local.py <handler> --env demo` for manual runs against demo.
 
@@ -109,7 +116,8 @@ duplicate morning run is a no-op.
 - [ ] Terraform: ECR, four Lambda functions, EventBridge schedules (UTC), S3 bucket (versioned),
       SSM parameters (values set by hand, not in state), IAM, Lambda error alarms → alert path.
 - [ ] `make`/script: build, push, `terraform apply` with the image digest.
-- [ ] Early-close days: schedule handling (EOD earlier) driven by the calendar.
+- [ ] Early-close days: one-off EventBridge schedules for `eod` and both watchdogs at that day's
+      flatten time, generated from `data/early_close.yaml`.
 
 **Exit:** demo stack deployed; a forced morning run in AWS places/cancels on demo; Telegram
 messages arrive.
