@@ -60,36 +60,50 @@ design judged against `2fe13c7c`. Don't tune the variant.
 
 Red-green against Hermes fixtures. No I/O in `gtb.core`.
 
-- [ ] Time helpers: UTC day boundaries, NY 17:00 anchor with DST, weekday checks.
-- [ ] `tokyo_range` and `range_history` (≥ 50 bars, ≥ 15 history, median of last 20).
-- [ ] 4h bucketing from 1h, sealed buckets only; Wilder ATR(20). Match Hermes' seeding — read
+- [x] Time helpers: UTC day boundaries, NY 17:00 anchor with DST, weekday checks.
+- [x] `tokyo_range` and `range_history` (≥ 50 bars, ≥ 15 history, median of last 20).
+- [x] 4h bucketing from 1h, sealed buckets only; Wilder ATR(20). Match Hermes' seeding — read
       `hermes.indicators` ATR before writing it.
-- [ ] `plan_day`: gate, levels, `d`/shortened flag, lots (floor to 0.01; skip below), expiry,
+- [x] `plan_day`: gate, levels, `d`/shortened flag, lots (floor to 0.01; skip below), expiry,
       early-close adjustments, `reason` codes.
-- [ ] `r_multiple`.
-- [ ] **Replay test:** feed historical bars (exported once from Hermes' cache into a compact
+- [x] `r_multiple`.
+- [x] **Replay test:** feed historical bars (exported once from Hermes' cache into a compact
       fixture) through `plan_day` for every weekday 2018–2026.08 and compare with the variant's
       per-day diagnostics: gate decision and range/median exact, ATR ≤ 0.1%, levels to the tick.
-- [ ] Unit tests for the rare paths: shortened SL, early close, min-size skip, Monday after a
+- [x] Unit tests for the rare paths: shortened SL, early close, min-size skip, Monday after a
       holiday, DST change weeks.
 
 **Exit:** replay test passes on all days.
+
+*Done 2026-10-11.* `tests/test_replay.py` matches all 2,218 day plans (gate, reason, range, median
+exact; ATR within 1.6e-8 relative with a 90-day 1h window; levels within half a tick; lots exact);
+`tests/test_plan_day.py` covers early close, min-size skip (no orders) and a missing 08:55 bar.
+Fixture `tests/fixtures/bars.csv.gz` (3.3 MB) from `../hermes/research/tokyo/static_export.py`.
 
 ---
 
 ## Phase 3 — Broker client (parallel with Phase 2)
 
-- [ ] Framing + TLS + protobuf send/receive with request/response correlation, heartbeats, timeout.
-- [ ] App auth, account auth, token refresh (write back to SSM via an injected store).
-- [ ] Symbol id and spec; trendbars M5/H1 with pagination (reuse ideas from Hermes'
+- [x] Framing + TLS + protobuf send/receive with request/response correlation, heartbeats, timeout.
+- [x] App auth, account auth, token refresh (write back to SSM via an injected store).
+- [x] Symbol id and spec; trendbars M5/H1 with pagination (reuse ideas from Hermes'
       `ctrader_source.py`: `trendbar_to_bar`, `prev_page_end`).
-- [ ] Reconcile (positions + pending orders), place stop order (absolute SL, expiry, label,
+- [x] Reconcile (positions + pending orders), place stop order (absolute SL, expiry, label,
       clientOrderId), cancel, close position, deal list, tick data.
-- [ ] Offline unit tests on framing and decoding with recorded fixtures; a manual
-      `scripts/broker_smoke.py` against the **demo** that places and cancels a far-away order.
+- [x] Offline tests against an in-process fake server (`tests/fake_ctrader.py`); a manual
+      `scripts/broker_smoke.py` that places and cancels a far-away order — on a demo account only.
 
 **Exit:** smoke script runs end-to-end on demo; bars fetched by the client equal Hermes' cached
 bars for an overlapping week.
+
+*Done 2026-10-11.* Bars: 1,355 M5 bars (2026-10-05 → 10-09) identical to Hermes' cache, and 113
+native H1 bars identical to H1 aggregated from M5. On demo account 46585934 (trading-scope token):
+auth, symbol spec, balance, ticks, reconcile, and a buy stop (order 74143854, 0.01 lot at 5,033.22,
+SL 4,982.89, expiry +30 min, label `gtb-smoke`) placed while the market was closed — accepted,
+visible in reconcile and in cTrader — then cancelled and gone from reconcile.
+Found live: `GetTrendbarsReq` ignores `fromTimestamp` (returns `count` bars back from
+`toTimestamp`); the client filters to the window (regression test added). An access token needs
+the **Trading** scope to place orders (an "Account info" token gets `TRADE permission required`).
 
 ---
 

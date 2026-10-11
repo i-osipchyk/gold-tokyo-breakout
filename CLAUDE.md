@@ -34,6 +34,8 @@ Read these before writing code:
 
 - Never place, modify or close orders on the **live** account, or deploy the `live` environment,
   without an explicit instruction in the current conversation. Demo is fine for smoke tests.
+- Check which account `.env` points at before anything that trades (`CTraderClient.is_live()`);
+  `scripts/broker_smoke.py` refuses to place orders on a live account.
 - Never print or commit secrets. They live in SSM Parameter Store; locally in an untracked `.env`.
 - Tests are **offline**: fake broker/S3/Telegram, recorded fixtures, injected time. No test sleeps
   or hits the network.
@@ -43,6 +45,7 @@ Read these before writing code:
 ```bash
 uv run pytest                 # offline test suite
 uv run ruff check .           # lint
+uv run python scripts/broker_smoke.py   # real Open API via .env; order round trip on demo only
 uv run python scripts/run_local.py <morning|eod|watchdog|heartbeat> --env demo
 docker build --platform linux/arm64 -t gtb .
 terraform -chdir=infra plan
