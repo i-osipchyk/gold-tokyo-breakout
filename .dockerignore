@@ -1,0 +1,6 @@
+*
+!pyproject.toml
+!uv.lock
+!data/early_close.yaml
+!src/gtb/**
+**/__pycache__

@@ -221,3 +221,12 @@ __marimo__/
 
 # local run records (scripts/run_local.py)
 /local/
+
+# terraform
+infra/.terraform/
+infra/tfplan
+infra/*.tfstate*
+infra/early_close.auto.tfvars.json
+
+# reconcile: synced S3 records
+reconcile/data/

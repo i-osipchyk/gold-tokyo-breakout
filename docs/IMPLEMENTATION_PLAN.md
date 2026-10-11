@@ -139,26 +139,50 @@ equity + that day's earlier closed P&L.
 
 ## Phase 5 — Infrastructure
 
-- [ ] `Dockerfile` (AWS Lambda Python 3.12 base, arm64), one image, handler chosen per function.
-- [ ] Terraform: ECR, four Lambda functions, EventBridge schedules (UTC), S3 bucket (versioned),
+- [x] `Dockerfile` (AWS Lambda Python 3.12 base, arm64), one image, handler chosen per function.
+- [x] Terraform: ECR, four Lambda functions, EventBridge schedules (UTC), S3 bucket (versioned),
       SSM parameters (values set by hand, not in state), IAM, Lambda error alarms → alert path.
-- [ ] `make`/script: build, push, `terraform apply` with the image digest.
-- [ ] Early-close days: one-off EventBridge schedules for `eod` and both watchdogs at that day's
+- [x] `make`/script: build, push, `terraform apply` with the image digest.
+- [x] Early-close days: one-off EventBridge schedules for `eod` and both watchdogs at that day's
       flatten time, generated from `data/early_close.yaml`.
 
 **Exit:** demo stack deployed; a forced morning run in AWS places/cancels on demo; Telegram
 messages arrive.
 
+*Built 2026-10-11; not deployed yet.* `infra/` (one root module, `-var-file=env/<env>.tfvars`,
+state in `s3://gtb-terraform-state-<account>/gtb/<env>.tfstate`, eu-central-1) passes
+`terraform validate`. Per env: ECR repo, records bucket (versioned, private, SSE), five functions
+from one arm64 image (`gtb.runs.app.<run>_handler`; `alarm` forwards CloudWatch alarms from SNS to
+Telegram), weekday schedules (DISABLED until Phase 7 via `schedules_enabled`), early-close
+one-offs from `python -m gtb.schedules`, Lambda error alarms. Secrets: `scripts/put_secrets.py`
+(SSM SecureStrings, never in Terraform state). `scripts/deploy.sh <env> [--plan]` does state
+bucket -> init -> ECR -> build/push -> plan/apply by digest. The image builds (641 MB), imports all
+five handlers, finds the calendar, and the Lambda emulator resolves a handler from the image
+command. Fixed on the way: a morning run started after 09:05 (e.g. a Lambda retry) now records
+`cutoff_missed` instead of placing. `data/early_close.yaml` `future` is still empty.
+
 ---
 
 ## Phase 6 — Reconciliation (local)
 
-- [ ] `reconcile/` script: `aws s3 sync`, run the Hermes variant over the window (warm-up before
+- [x] `reconcile/` script: `aws s3 sync`, run the Hermes variant over the window (warm-up before
       it, starting equity = account's), three-layer report (ARCHITECTURE §4.5), R-based running
       totals for the clocks.
-- [ ] Classifies layer-2 differences (ask-side marginal touches) instead of failing them.
+- [x] Classifies layer-2 differences (ask-side marginal touches) instead of failing them.
 
 **Exit:** report runs over the first demo days.
+
+*Built 2026-10-11; exit pending demo records.* `uv run python -m reconcile.report --env demo
+[--local] [--end D]`: `aws s3 sync` (or `./local`), `reconcile/hermes_replay.py` run in Hermes'
+venv from `$HERMES_DIR` (variant from 45 days before the first record, account equity, the bot's
+early-close calendar merged in; exports day plans, trades and 09:00–21:00 5m bid bars), then
+`reconcile.compare` (layer 1 exact / ATR 0.1%; layer 2 levels to half a tick, shortened flag,
+risk as a share of each side's budget, entry and exit bars with ask-side marginal touches —
+buy entries and short stops within the recorded spread, else $0.12 — marked `explained`; layer 3
+live − replay R per trade) and `reconcile.clocks` (edge clock over replay trades since 2026-10-11,
+execution clock rolling 20). 18 offline tests. Exit code 1 on a mismatch, a missing day or a
+breach. Run end to end over the local Sunday record: replay 2026-08-27 → 10-11 (32 plans,
+4 trades), nothing to compare yet.
 
 ---
 

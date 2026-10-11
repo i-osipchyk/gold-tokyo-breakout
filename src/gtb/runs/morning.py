@@ -38,8 +38,8 @@ async def morning(deps: Deps) -> DayRecord:
         if plan.reason != "no_plan_bar" or now + RETRY_EVERY > cutoff:
             break
         await deps.clock.sleep_until(now + RETRY_EVERY)
-    if plan.reason == "no_plan_bar":
-        plan = replace(plan, reason="cutoff_missed")
+    if plan.reason == "no_plan_bar" or (plan.trade and now > cutoff):   # e.g. a late retry
+        plan = replace(plan, trade=False, reason="cutoff_missed", orders=())
 
     record = DayRecord(
         date=day, env=deps.env, code_version=deps.code_version,
@@ -48,7 +48,8 @@ async def morning(deps: Deps) -> DayRecord:
                       atr=plan.atr, equity=equity, plan_time=now, attempts=attempts),
         decision=Decision(trade=plan.trade, reason=plan.reason))
     if plan.reason == "cutoff_missed":
-        record.alerts.append(f"cutoff missed: no 08:55 bar by {CUTOFF:%H:%M}, no orders today")
+        record.alerts.append(f"cutoff missed: no plan by {CUTOFF:%H:%M} (last attempt "
+                             f"{now:%H:%M:%S}), no orders today")
     elif plan.reason == "skipped_min_size":
         record.alerts.append(f"skipped_min_size: equity {equity:,.2f} is too small for 0.01 lot "
                              f"at ATR {plan.atr:.3f}, no orders today")

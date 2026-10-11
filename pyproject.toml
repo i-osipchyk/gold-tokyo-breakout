@@ -29,6 +29,7 @@ build-backend = "uv_build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]                    # reconcile/ (local tooling, not part of the image)
 faulthandler_timeout = 30
 filterwarnings = [
     # importing ctrader_open_api.messages runs the package __init__, which loads Twisted;

@@ -128,3 +128,17 @@ def test_a_rejected_order_is_recorded_and_alerted_and_the_other_side_still_place
         ("buy", "rejected", None), ("sell", "placed", deps.broker.placed[0].order_id)]
     assert len(record.alerts) == 1 and "NOT_ENOUGH_MONEY" in record.alerts[0]
     assert any(m.startswith("ALERT") and "NOT_ENOUGH_MONEY" in m for m in deps.notifier.sent)
+
+
+def test_a_run_starting_after_the_cutoff_places_nothing(tmp_path):
+    # Lambda re-invokes a failed async run ~1 and ~2 minutes later; at 09:07 the day is missed
+    # even though the 08:55 bar is there.
+    deps = _setup(tmp_path)
+    deps.clock.set(FIRES + timedelta(minutes=7))
+
+    asyncio.run(morning(deps))
+
+    assert deps.broker.placed == []
+    record = deps.store.get(DAY.date())
+    assert (record.decision.trade, record.decision.reason) == (False, "cutoff_missed")
+    assert any(m.startswith("ALERT") and "cutoff" in m for m in deps.notifier.sent)
