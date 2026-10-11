@@ -366,3 +366,30 @@ def test_trendbars_before_the_start_are_dropped_because_the_server_ignores_it():
 
     assert [b.ts for b in bars] == [t0 + timedelta(minutes=5 * i) for i in range(5)]
     assert len(fake.of_type(M.ProtoOAGetTrendbarsReq)) == 2
+
+
+def test_a_rate_limited_request_is_retried_after_a_pause():
+    # Seen live: paging 45 days of M5 back to back gets "BLOCKED_PAYLOAD_TYPE: You are being
+    # rate limited" (historical data is limited to ~5 requests a second).
+    from ctrader_open_api.messages import OpenApiModelMessages_pb2 as MM
+    fake = FakeCTrader()
+    replies = iter([
+        [M.ProtoOAErrorRes(errorCode="BLOCKED_PAYLOAD_TYPE", description="You are being rate "
+                           "limited")],
+        [M.ProtoOATraderRes(ctidTraderAccountId=ACCOUNT, trader=MM.ProtoOATrader(
+            ctidTraderAccountId=ACCOUNT, balance=12_345, moneyDigits=2, depositAssetId=1))],
+    ])
+    fake.on(M.ProtoOATraderReq, lambda r: next(replies))
+
+    async def body():
+        port = await fake.start()
+        try:
+            async with CTraderClient("127.0.0.1", port, client_id="a", client_secret="b",
+                                     access_token="t", account_id=ACCOUNT, use_tls=False,
+                                     timeout=5, rate_limit_pause=0) as client:
+                return await client.balance()
+        finally:
+            await fake.stop()
+
+    assert asyncio.run(body()) == 123.45
+    assert len(fake.of_type(M.ProtoOATraderReq)) == 2

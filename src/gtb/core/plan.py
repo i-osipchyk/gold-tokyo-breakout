@@ -75,6 +75,13 @@ def _tick(price: float) -> float:
     return round(round(price / TICK) * TICK, 2)
 
 
+def flatten_at(day: date, early_closes: Mapping[date, time] | None = None) -> datetime:
+    """When the day's position is market-closed: 20:50, or the open of an early-close session's
+    last 5m bar if that is earlier."""
+    last_bar = (early_closes or {}).get(day)
+    return _at(day, FLATTEN if last_bar is None else min(FLATTEN, last_bar))
+
+
 def plan_day(
     day: date,
     bars_5m: list[Bar],
@@ -102,10 +109,8 @@ def plan_day(
     med = median(history) if history else None
     atr = wilder_atr(sealed_4h(bars_1h, _at(day, TOKYO_END)))
 
-    last_bar = (early_closes or {}).get(day)
-    flatten = FLATTEN if last_bar is None else min(FLATTEN, last_bar)
-    flatten_at = _at(day, flatten)
-    expiry = min(_at(day, EXPIRY), flatten_at - timedelta(minutes=5))
+    flatten = flatten_at(day, early_closes)
+    expiry = min(_at(day, EXPIRY), flatten - timedelta(minutes=5))
 
     reason = None
     if day.weekday() >= 5:
@@ -123,7 +128,7 @@ def plan_day(
 
     plan = DayPlan(day=day, tokyo_high=hi, tokyo_low=lo, bars=len(today), range=rng,
                    history_len=len(history), median=med, atr=atr, equity=equity, trade=False,
-                   reason=reason, d=None, shortened=None, orders=(), flatten_at=flatten_at)
+                   reason=reason, d=None, shortened=None, orders=(), flatten_at=flatten)
     if reason is not None:
         return plan
     assert atr is not None and hi is not None and lo is not None and rng is not None

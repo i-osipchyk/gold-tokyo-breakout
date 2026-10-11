@@ -109,18 +109,31 @@ the **Trading** scope to place orders (an "Account info" token gets `TRADE permi
 
 ## Phase 4 — Runs, records, alerts
 
-- [ ] `config.py`: env (`demo`/`live`), risk %, endpoints, S3 prefix; secrets from SSM.
-- [ ] `records`: DayRecord dataclass ↔ JSON (ARCHITECTURE §4.4), S3 read-modify-write.
-- [ ] `alerts`: Telegram send; message formats for the morning summary, EOD summary, alerts.
-- [ ] Handlers: `morning` (sleep to 09:00:10, wait for 08:55 bar with 15 s retries to 09:05:00,
+- [x] `config.py`: env (`demo`/`live`), risk %, endpoints, S3 prefix; secrets from SSM.
+- [x] `records`: DayRecord dataclass ↔ JSON (ARCHITECTURE §4.4), S3 read-modify-write.
+- [x] `alerts`: Telegram send; message formats for the morning summary, EOD summary, alerts.
+- [x] Handlers: `morning` (sleep to 09:00:10, wait for 08:55 bar with 15 s retries to 09:05:00,
       idempotent placement), `heartbeat`, `eod` (sleep to 20:50:05, cancel, close with retries,
       deals + tick-data spread, record, summary), `watchdog` (from F+1/F+2 min, check every
       30 s until F+4 min).
-- [ ] Handler tests with fake broker / S3 / Telegram (time injected, no sleeping in tests).
-- [ ] Local runner `scripts/run_local.py <handler> --env demo` for manual runs against demo.
+- [x] Handler tests with fake broker / S3 / Telegram (time injected, no sleeping in tests).
+- [x] Local runner `scripts/run_local.py <handler> --env demo` for manual runs against demo.
 
 **Exit:** each handler run locally against demo produces the expected orders/records/messages;
 duplicate morning run is a no-op.
+
+*Built 2026-10-11; exit pending a weekday run.* 56 offline tests (handlers against an in-memory
+broker/clock with the real directory record store; S3 and SSM via botocore `Stubber`; Telegram via
+httpx `MockTransport`). Run locally on demo 46585934 on a Sunday: heartbeat alerted the missing
+record, morning recorded `weekend` (ATR 29.18, median 52.78 over 20, equity 50,448.88), a second
+morning was a no-op, eod recorded no trades, the watchdog stayed quiet to 20:54. Found live: paging
+45 days of M5 is rate-limited (`BLOCKED_PAYLOAD_TYPE`) -- the client now re-sends after a pause;
+and request latency made the watchdog skip its 20:54:00 check -- the last wait is now clamped to
+the deadline. Still to see on a weekday: morning placing both stops, eod cancelling/closing.
+Decisions: a run refuses to start unless the account's live/demo flag matches `GTB_ENV`; the
+heartbeat refreshes the token once it is 7 days old (`ctrader_token_refreshed_at` in SSM);
+local runs never refresh it. R = net P&L / (risk x equity at entry), equity at entry = plan-time
+equity + that day's earlier closed P&L.
 
 ---
 

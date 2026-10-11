@@ -45,12 +45,12 @@ target-version = "py312"
 select = ["E", "F", "W", "I", "B", "UP", "SIM"]
 
 [tool.ruff.lint.isort]
-known-local-folder = ["fake_ctrader"]
+known-local-folder = ["fake_ctrader", "fake_broker", "synthetic"]
 
 [tool.mypy]
 strict = true
 packages = ["gtb"]
 
 [[tool.mypy.overrides]]
-module = ["ctrader_open_api.*"]
+module = ["ctrader_open_api.*", "yaml", "boto3", "botocore.*"]
 ignore_missing_imports = true

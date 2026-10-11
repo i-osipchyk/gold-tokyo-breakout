@@ -29,6 +29,7 @@ PORT = 5035
 PRICE_SCALE = 100_000             # trendbar and tick prices are integers in 1e-5 units
 _SIDES = {"buy": MM.BUY, "sell": MM.SELL}
 PAGE = 1000                       # trendbars per request (Open API cap)
+RATE_LIMITED = "BLOCKED_PAYLOAD_TYPE"   # "You are being rate limited": the request was not run
 _PERIOD_SECONDS = {"M1": 60, "M5": 300, "M15": 900, "M30": 1800, "H1": 3600, "H4": 14400}
 
 
@@ -124,12 +125,14 @@ _TYPES = _message_types()
 class CTraderClient:
     def __init__(self, host: str, port: int = PORT, *, client_id: str, client_secret: str,
                  access_token: str, account_id: int, use_tls: bool = True,
-                 timeout: float = 30, heartbeat_every: float = 10) -> None:
+                 timeout: float = 30, heartbeat_every: float = 10,
+                 rate_limit_pause: float = 1.0, rate_limit_retries: int = 10) -> None:
         self.host, self.port = host, port
         self.client_id, self.client_secret = client_id, client_secret
         self.access_token, self.account_id = access_token, account_id
         self.use_tls, self.timeout = use_tls, timeout
         self.heartbeat_every = heartbeat_every
+        self.rate_limit_pause, self.rate_limit_retries = rate_limit_pause, rate_limit_retries
         self._beating: asyncio.Task[None] | None = None
         self._ids = itertools.count(1)
         self._pending: dict[str, asyncio.Future[Any]] = {}
@@ -312,6 +315,18 @@ class CTraderClient:
         self._writer.write(struct.pack(">I", len(data)) + data)
 
     async def _request(self, msg: Any) -> Any:
+        """Send ``msg`` and wait for its reply. A rate-limited request was refused unexecuted,
+        so it is re-sent after a pause."""
+        for _ in range(self.rate_limit_retries):
+            try:
+                return await self._request_once(msg)
+            except CTraderError as e:
+                if e.code != RATE_LIMITED:
+                    raise
+            await asyncio.sleep(self.rate_limit_pause)
+        return await self._request_once(msg)
+
+    async def _request_once(self, msg: Any) -> Any:
         msg_id = str(next(self._ids))
         future: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
         self._pending[msg_id] = future
