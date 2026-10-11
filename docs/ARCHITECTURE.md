@@ -230,7 +230,7 @@ Daily during demo, weekly in live. Hermes stays in Hermes; nothing of it runs in
 | Secrets | SSM Parameter Store SecureString: cTrader client id/secret, access + refresh token, account id; Telegram bot token + chat id. The bot refreshes the access token (~30-day lifetime) and writes it back |
 | Monitoring | Lambda error alarms → alert path, plus the S3-based `heartbeat` |
 | Environments | `demo` and `live`: same image, different config (endpoint, account id, risk %, S3 prefix, schedules on/off) |
-| Region | `$AWS_REGION` at deploy time — eu-west-1 (Ireland; latency is irrelevant for 5m bars). The Terraform state bucket stays in eu-central-1 |
+| Region | `$AWS_REGION` at deploy time — eu-west-1 (Ireland; latency is irrelevant for 5m bars), Terraform state included (`gtb-terraform-state-<account>-<region>`) |
 
 ---
 

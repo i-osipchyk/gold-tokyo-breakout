@@ -33,10 +33,8 @@ case "$ENV" in
 esac
 
 ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
-STATE_BUCKET="gtb-terraform-state-$ACCOUNT"
+STATE_BUCKET="gtb-terraform-state-$ACCOUNT-$REGION"   # state lives with its stack
 
-# The state bucket may live in another region than the stack (it was created in eu-central-1);
-# the backend just needs to know where.
 if ! aws s3api head-bucket --bucket "$STATE_BUCKET" 2>/dev/null; then
   echo "creating state bucket $STATE_BUCKET"
   aws s3api create-bucket --bucket "$STATE_BUCKET" --region "$REGION" \
