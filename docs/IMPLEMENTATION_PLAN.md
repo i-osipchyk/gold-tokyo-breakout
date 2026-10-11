@@ -150,7 +150,8 @@ equity + that day's earlier closed P&L.
 messages arrive.
 
 *Built 2026-10-11; not deployed yet.* `infra/` (one root module, `-var-file=env/<env>.tfvars`,
-state in `s3://gtb-terraform-state-<account>/gtb/<env>.tfstate`, eu-central-1) passes
+state in `s3://gtb-terraform-state-<account>/gtb/<env>.tfstate` (bucket in eu-central-1), stack in
+eu-west-1) passes
 `terraform validate`. Per env: ECR repo, records bucket (versioned, private, SSE), five functions
 from one arm64 image (`gtb.runs.app.<run>_handler`; `alarm` forwards CloudWatch alarms from SNS to
 Telegram), weekday schedules (DISABLED until Phase 7 via `schedules_enabled`), early-close

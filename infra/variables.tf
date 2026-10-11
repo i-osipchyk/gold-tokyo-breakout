@@ -9,8 +9,8 @@ variable "env" {
 }
 
 variable "region" {
-  type    = string
-  default = "eu-central-1"
+  description = "Where the stack lives; scripts/deploy.sh passes $AWS_REGION."
+  type        = string
 }
 
 variable "image_uri" {

@@ -230,7 +230,7 @@ Daily during demo, weekly in live. Hermes stays in Hermes; nothing of it runs in
 | Secrets | SSM Parameter Store SecureString: cTrader client id/secret, access + refresh token, account id; Telegram bot token + chat id. The bot refreshes the access token (~30-day lifetime) and writes it back |
 | Monitoring | Lambda error alarms → alert path, plus the S3-based `heartbeat` |
 | Environments | `demo` and `live`: same image, different config (endpoint, account id, risk %, S3 prefix, schedules on/off) |
-| Region | eu-central-1 (latency is irrelevant for 5m bars) |
+| Region | `$AWS_REGION` at deploy time — eu-west-1 (Ireland; latency is irrelevant for 5m bars). The Terraform state bucket stays in eu-central-1 |
 
 ---
 
@@ -369,5 +369,5 @@ The Hermes static variant lives in the Hermes repo:
 | 10 | Demo at 1% risk; R-based kill rules; −15% money stop | %-equity rules |
 | 11 | Two clocks: edge (variant replay from freeze) and execution (live) | live trades only; clock from 2026-08-06 |
 | 12 | Variant acceptance thresholds fixed before the run; fail → fallback, no tweaking | — |
-| 13 | Terraform, Docker arm64 image, asyncio client, SSM, eu-central-1 | zip + layers; Twisted in Lambda |
+| 13 | Terraform, Docker arm64 image, asyncio client, SSM, eu-west-1 (moved from eu-central-1 before the first deploy) | zip + layers; Twisted in Lambda |
 | 14 | Plan at 09:00:10 after the 08:55 bar, retry every 15 s to 09:05:00; expiry 20:05 | plan at 09:05 (spec timing) |

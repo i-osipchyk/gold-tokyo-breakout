@@ -4,6 +4,8 @@
 #   scripts/deploy.sh demo            # plan + apply (Terraform asks before changing anything)
 #   scripts/deploy.sh demo --plan     # stop after the plan
 #
+# The stack goes to $AWS_REGION (required).
+#
 # Steps: state bucket (once) -> terraform init -> ECR repo -> docker build/push (arm64, tagged
 # with the git sha) -> early-close one-off schedules from data/early_close.yaml -> plan/apply
 # with the image digest. Secrets are not touched here: scripts/put_secrets.py.
@@ -11,7 +13,7 @@ set -euo pipefail
 
 ENV="${1:?usage: scripts/deploy.sh <demo|live> [--plan]}"
 MODE="${2:-apply}"
-REGION="eu-central-1"
+REGION="${AWS_REGION:?set AWS_REGION to the region to deploy to (e.g. eu-west-1)}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TF="terraform -chdir=$ROOT/infra"
 
@@ -27,6 +29,8 @@ esac
 ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
 STATE_BUCKET="gtb-terraform-state-$ACCOUNT"
 
+# The state bucket may live in another region than the stack (it was created in eu-central-1);
+# the backend just needs to know where.
 if ! aws s3api head-bucket --bucket "$STATE_BUCKET" 2>/dev/null; then
   echo "creating state bucket $STATE_BUCKET"
   aws s3api create-bucket --bucket "$STATE_BUCKET" --region "$REGION" \
@@ -37,9 +41,13 @@ if ! aws s3api head-bucket --bucket "$STATE_BUCKET" 2>/dev/null; then
     BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
 fi
 
+STATE_REGION="$(aws s3api get-bucket-location --bucket "$STATE_BUCKET" \
+  --query LocationConstraint --output text)"
+[[ "$STATE_REGION" == "None" ]] && STATE_REGION="us-east-1"
+
 $TF init -input=false -reconfigure \
   -backend-config="bucket=$STATE_BUCKET" -backend-config="key=gtb/$ENV.tfstate" \
-  -backend-config="region=$REGION" >/dev/null
+  -backend-config="region=$STATE_REGION" >/dev/null
 
 VARS=(-var-file="env/$ENV.tfvars" -var="region=$REGION")
 

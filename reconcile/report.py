@@ -33,7 +33,6 @@ ROOT = Path(__file__).parents[1]
 FREEZE = date(2026, 10, 11)       # docs/REFERENCE.md: rules frozen, edge clock starts
 WARM_UP = timedelta(days=45)      # >= 20 previous valid Tokyo ranges
 RISK = {"demo": 0.01, "live": 0.0025}
-REGION = "eu-central-1"
 
 
 def sync(env: str) -> Path:
@@ -41,7 +40,8 @@ def sync(env: str) -> Path:
                               "--output", "text"], check=True, capture_output=True,
                              text=True).stdout.strip()
     target = ROOT / "reconcile" / "data"
-    subprocess.run(["aws", "s3", "sync", "--region", REGION, "--only-show-errors",
+    region = os.environ.get("AWS_REGION") or sys.exit("set AWS_REGION (e.g. eu-west-1)")
+    subprocess.run(["aws", "s3", "sync", "--region", region, "--only-show-errors",
                     f"s3://gtb-{env}-records-{account}/{env}/records/",
                     str(target / env / "records")], check=True)
     return target

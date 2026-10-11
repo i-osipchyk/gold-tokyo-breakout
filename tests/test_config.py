@@ -48,7 +48,7 @@ def test_secrets_come_from_parameters_named_like_the_env_file_in_lower_case():
 
 
 def test_ssm_parameters_are_read_decrypted_by_path_and_keyed_by_short_name():
-    client = boto3.client("ssm", region_name="eu-central-1", aws_access_key_id="x",
+    client = boto3.client("ssm", region_name="eu-west-1", aws_access_key_id="x",
                           aws_secret_access_key="x")
     stub = Stubber(client)
     stub.add_response("get_parameters_by_path", {

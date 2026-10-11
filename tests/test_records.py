@@ -57,7 +57,7 @@ def test_a_record_survives_a_json_round_trip_in_the_documented_shape():
 
 
 def _s3():
-    client = boto3.client("s3", region_name="eu-central-1", aws_access_key_id="x",
+    client = boto3.client("s3", region_name="eu-west-1", aws_access_key_id="x",
                           aws_secret_access_key="x")
     return client, Stubber(client)
 
