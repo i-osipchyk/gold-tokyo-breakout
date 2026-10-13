@@ -58,6 +58,5 @@ module "app" {
     GTB_BUCKET = module.records.name
   }
   write_bucket_arns  = [module.records.arn]
-  ssm_write          = true # heartbeat rotates the cTrader token pair
-  log_retention_days = 400  # audit trail
+  log_retention_days = 400 # audit trail
 }

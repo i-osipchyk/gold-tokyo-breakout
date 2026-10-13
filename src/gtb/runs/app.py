@@ -12,12 +12,12 @@ from typing import Any
 
 from ..alerts import TelegramNotifier
 from ..alerts.messages import alert_text
-from ..broker import CTraderClient, Tokens, refresh_tokens
-from ..config import Config, Secrets, load_config, load_secrets, ssm_parameters
+from ..broker import CTraderClient
+from ..config import SHARED_PREFIX, Config, Secrets, load_config, load_secrets, ssm_parameters
 from ..records import RecordStore, S3RecordStore
 from .deps import Deps, Notifier
 from .eod import eod
-from .heartbeat import TokenKeeper, heartbeat
+from .heartbeat import heartbeat
 from .morning import morning
 from .watchdog import watchdog
 
@@ -40,53 +40,11 @@ class PrintNotifier:
         print(f"--- message ---\n{text}\n---------------")
 
 
-class SsmTokens:
-    """The access/refresh token pair in SSM, with the time of the last refresh beside it."""
-
-    REFRESHED_AT = "ctrader_token_refreshed_at"
-
-    def __init__(self, ssm: Any, config: Config, secrets: Secrets) -> None:
-        self.ssm, self.config, self.secrets = ssm, config, secrets
-        self._params = ssm_parameters(ssm, config.ssm_prefix)
-
-    def _put(self, name: str, value: str, secure: bool = True) -> None:
-        self.ssm.put_parameter(Name=self.config.ssm_prefix + name, Value=value, Overwrite=True,
-                               Type="SecureString" if secure else "String")
-
-    def refreshed_at(self) -> datetime | None:
-        at = self._params.get(self.REFRESHED_AT)
-        return datetime.fromisoformat(at) if at else None
-
-    def load(self) -> Tokens:
-        return Tokens(self._params["ctrader_access_token"], self._params["ctrader_refresh_token"])
-
-    def save(self, tokens: Tokens) -> None:
-        self._put("ctrader_access_token", tokens.access_token)
-        self._put("ctrader_refresh_token", tokens.refresh_token)
-
-    async def refresh(self, now: datetime) -> None:
-        await refresh_tokens(self.config.host, client_id=self.secrets.client_id,
-                             client_secret=self.secrets.client_secret, store=self)
-        self._put(self.REFRESHED_AT, now.isoformat(), secure=False)
-        self._params[self.REFRESHED_AT] = now.isoformat()
-
-
-class NoRefresh:
-    """Local runs never rotate tokens (SSM holds the deployed pair)."""
-
-    def refreshed_at(self) -> datetime | None:
-        return datetime.now(UTC)
-
-    async def refresh(self, now: datetime) -> None:
-        raise AssertionError("not reached")
-
-
 RUNS = ("morning", "heartbeat", "eod", "watchdog")
 
 
 async def run(name: str, config: Config, secrets: Secrets, *, store: RecordStore,
-              notifier: Notifier, clock: SystemClock | None = None,
-              tokens: TokenKeeper | None = None) -> None:
+              notifier: Notifier, clock: SystemClock | None = None) -> None:
     """Connect, check the account is the kind ``config.env`` trades, run handler ``name``."""
     clock = clock or SystemClock()
     try:
@@ -104,7 +62,7 @@ async def run(name: str, config: Config, secrets: Secrets, *, store: RecordStore
                 "morning": lambda: morning(deps),
                 "eod": lambda: eod(deps),
                 "watchdog": lambda: watchdog(deps),
-                "heartbeat": lambda: heartbeat(deps, tokens or NoRefresh()),
+                "heartbeat": lambda: heartbeat(deps),
             }
             await handlers[name]()
     except Exception as e:
@@ -120,13 +78,13 @@ def _lambda(name: str) -> None:
 
     config = load_config(os.environ)
     ssm = boto3.client("ssm")
-    secrets = load_secrets(ssm_parameters(ssm, config.ssm_prefix))
+    shared = os.environ.get("SHARED_SECRETS_PATH", SHARED_PREFIX).rstrip("/") + "/"
+    secrets = load_secrets(ssm_parameters(ssm, config.ssm_prefix), ssm_parameters(ssm, shared))
     if config.bucket is None:
         raise RuntimeError("GTB_BUCKET is not set")
     store = S3RecordStore(boto3.client("s3"), config.bucket, config.env)
     notifier = TelegramNotifier(secrets.telegram_bot_token, secrets.telegram_chat_id)
-    tokens = SsmTokens(ssm, config, secrets) if name == "heartbeat" else None
-    asyncio.run(run(name, config, secrets, store=store, notifier=notifier, tokens=tokens))
+    asyncio.run(run(name, config, secrets, store=store, notifier=notifier))
 
 
 def morning_handler(event: object, context: object) -> None:

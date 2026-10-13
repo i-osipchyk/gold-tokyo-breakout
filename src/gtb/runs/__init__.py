@@ -2,9 +2,8 @@
 
 from .deps import Broker, Clock, Deps, Notifier
 from .eod import eod
-from .heartbeat import TokenKeeper, heartbeat
+from .heartbeat import heartbeat
 from .morning import morning
 from .watchdog import watchdog
 
-__all__ = ["Broker", "Clock", "Deps", "Notifier", "TokenKeeper", "eod", "heartbeat", "morning",
-           "watchdog"]
+__all__ = ["Broker", "Clock", "Deps", "Notifier", "eod", "heartbeat", "morning", "watchdog"]

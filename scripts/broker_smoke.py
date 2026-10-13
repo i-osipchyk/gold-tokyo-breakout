@@ -2,10 +2,11 @@
 
     uv run python scripts/broker_smoke.py [--bars-out DIR] [--keep MINUTES]
 
-Reads CTRADER_CLIENT_ID / CTRADER_CLIENT_SECRET / CTRADER_ACCESS_TOKEN / CTRADER_ACCOUNT_ID from
-.env. Read-only checks run on any account; the order round trip (a buy stop far above the market,
-then cancelled -- or, with --keep, left to expire on its own after MINUTES) runs ONLY when the
-API reports the account as demo.
+Reads the shared cTrader credentials and token from SSM (/platform/shared/ctrader-*, with your AWS
+credentials; AWS_REGION, default eu-west-1) and CTRADER_ACCOUNT_ID from .env. Read-only checks
+run on any account; the order round trip (a buy stop far above the market, then cancelled -- or,
+with --keep, left to expire on its own after MINUTES) runs ONLY when the API reports the account
+as demo.
 """
 
 from __future__ import annotations
@@ -17,23 +18,27 @@ import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import boto3
 import dotenv
 
 from gtb.broker import DEMO_HOST, LIVE_HOST, CTraderClient, CTraderError
+from gtb.config import SHARED_PREFIX, ssm_parameters
 
 
-def _client(host: str) -> CTraderClient:
+def _client(host: str, shared: dict[str, str]) -> CTraderClient:
     return CTraderClient(
-        host, client_id=os.environ["CTRADER_CLIENT_ID"],
-        client_secret=os.environ["CTRADER_CLIENT_SECRET"],
-        access_token=os.environ["CTRADER_ACCESS_TOKEN"],
+        host, client_id=shared["ctrader-client-id"],
+        client_secret=shared["ctrader-client-secret"],
+        access_token=shared["ctrader-access-token"],
         account_id=int(os.environ["CTRADER_ACCOUNT_ID"]))
 
 
 async def _connect() -> tuple[CTraderClient, str]:
+    os.environ.setdefault("AWS_REGION", "eu-west-1")
+    shared = ssm_parameters(boto3.client("ssm"), SHARED_PREFIX)
     errors = []
     for host in (DEMO_HOST, LIVE_HOST):
-        client = _client(host)
+        client = _client(host, shared)
         try:
             await client.__aenter__()
             return client, host
