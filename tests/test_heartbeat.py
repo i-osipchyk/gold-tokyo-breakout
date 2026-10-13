@@ -29,7 +29,7 @@ class FakeTokens:
 
 def _with_morning_record(tmp_path):
     deps = make_deps(tmp_path, AT)
-    deps.store.put(DayRecord(date=DAY.date(), env="demo", code_version="abc123"))
+    deps.store.put(DayRecord(date=DAY.date(), env="dev", code_version="abc123"))
     return deps
 
 

@@ -138,6 +138,6 @@ class FakeBroker:
 def make_deps(tmp_path, now, *, m5=(), h1=(), early_closes=None, **broker):
     """Demo deps at 1% risk around a FakeBroker that shares the run's clock."""
     clock = FakeClock(now)
-    return Deps(env="demo", risk=0.01, broker=FakeBroker(clock, m5=m5, h1=h1, **broker),
+    return Deps(env="dev", risk=0.01, broker=FakeBroker(clock, m5=m5, h1=h1, **broker),
                 store=DirRecordStore(tmp_path), notifier=FakeNotifier(), clock=clock,
                 early_closes=early_closes or {}, code_version="abc123")

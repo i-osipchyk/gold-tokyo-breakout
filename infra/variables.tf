@@ -1,22 +1,27 @@
+variable "project" {
+  type    = string
+  default = "gtb"
+}
+
 variable "env" {
-  description = "demo | live"
+  description = "dev (cTrader demo account) | prod (live account)"
   type        = string
 
   validation {
-    condition     = contains(["demo", "live"], var.env)
-    error_message = "env must be demo or live."
+    condition     = contains(["dev", "prod"], var.env)
+    error_message = "env must be dev or prod."
   }
 }
 
 variable "region" {
-  description = "Where the stack lives; scripts/deploy.sh passes $AWS_REGION."
+  description = "Fed from AWS_REGION: CI passes -var region=..., local shells export TF_VAR_region=$AWS_REGION."
   type        = string
+  default     = "eu-west-1"
 }
 
 variable "image_uri" {
-  description = "ECR image by digest (repo@sha256:...). Empty only for the first, ECR-only apply."
+  description = "ECR image by digest (repo@sha256:...); CI passes it."
   type        = string
-  default     = ""
 }
 
 variable "schedules_enabled" {

@@ -1,76 +1,63 @@
-data "aws_caller_identity" "current" {}
-
 locals {
-  name    = "gtb-${var.env}"
-  account = data.aws_caller_identity.current.account_id
-  # The image is pushed between the ECR-only first apply and the full one (scripts/deploy.sh).
-  deployed = var.image_uri != ""
-
   # Run handlers: all of ARCHITECTURE §4.3 sleep inside the function to second offsets, and eod /
-  # watchdog keep retrying until F + 4 min, so give them 6 minutes.
-  runs = {
-    morning   = { timeout = 360 }
-    heartbeat = { timeout = 120 }
-    eod       = { timeout = 360 }
-    watchdog  = { timeout = 360 }
+  # watchdog keep retrying until F + 4 min, so give them 6 minutes. A failed run is retried by
+  # Lambda after ~1 and ~2 min: every run is idempotent, and morning refuses to place orders after
+  # 09:05, so retries can only help.
+  functions = {
+    for name, timeout in { morning = 360, heartbeat = 120, eod = 360, watchdog = 360 } :
+    name => {
+      handler       = "gtb.runs.app.${name}_handler"
+      timeout       = timeout
+      retries       = 2
+      max_event_age = 300
+    }
   }
 
-  # Regular schedules, UTC, weekdays. Early-close days add one-offs (var.early_close_schedules).
+  # Regular schedules, UTC, weekdays (minute granularity; second offsets are slept in the handler).
   schedules = {
-    morning   = { run = "morning", cron = "cron(0 9 ? * MON-FRI *)" }
-    heartbeat = { run = "heartbeat", cron = "cron(10 9 ? * MON-FRI *)" }
-    eod       = { run = "eod", cron = "cron(50 20 ? * MON-FRI *)" }
-    watchdog1 = { run = "watchdog", cron = "cron(51 20 ? * MON-FRI *)" }
-    watchdog2 = { run = "watchdog", cron = "cron(52 20 ? * MON-FRI *)" }
+    morning   = { function = "morning", expression = "cron(0 9 ? * MON-FRI *)" }
+    heartbeat = { function = "heartbeat", expression = "cron(10 9 ? * MON-FRI *)" }
+    eod       = { function = "eod", expression = "cron(50 20 ? * MON-FRI *)" }
+    watchdog1 = { function = "watchdog", expression = "cron(51 20 ? * MON-FRI *)" }
+    watchdog2 = { function = "watchdog", expression = "cron(52 20 ? * MON-FRI *)" }
   }
-}
 
-# --- image registry -------------------------------------------------------------------------
-
-resource "aws_ecr_repository" "gtb" {
-  name                 = local.name
-  image_tag_mutability = "MUTABLE"
-  force_delete         = false
-}
-
-resource "aws_ecr_lifecycle_policy" "gtb" {
-  repository = aws_ecr_repository.gtb.name
-  policy = jsonencode({
-    rules = [{
-      rulePriority = 1
-      description  = "keep the last 20 images"
-      selection    = { tagStatus = "any", countType = "imageCountMoreThan", countNumber = 20 }
-      action       = { type = "expire" }
-    }]
-  })
+  # Early-close days: one-offs from early_close.auto.tfvars.json (committed; a test keeps it equal
+  # to `python -m gtb.schedules`). Ones already past are dropped, so they leave on the next deploy.
+  early_close = {
+    for name, s in var.early_close_schedules : name => {
+      function   = s.run
+      expression = "at(${s.at})"
+    } if timecmp("${s.at}Z", plantimestamp()) > 0
+  }
 }
 
 # --- records (ARCHITECTURE §4.4) ------------------------------------------------------------
 
-resource "aws_s3_bucket" "records" {
-  bucket = "${local.name}-records-${local.account}"
+module "records" {
+  source  = "git::https://github.com/i-osipchyk/platform.git//terraform/modules/data-bucket?ref=v0.1.2"
+  project = var.project
+  env     = var.env
+  purpose = "records"
 }
 
-resource "aws_s3_bucket_versioning" "records" {
-  bucket = aws_s3_bucket.records.id
-  versioning_configuration {
-    status = "Enabled"
+# --- functions, schedules, alarms (-> platform-alarms -> Telegram) ---------------------------
+
+module "app" {
+  source    = "git::https://github.com/i-osipchyk/platform.git//terraform/modules/lambda-app?ref=v0.1.2"
+  project   = var.project
+  env       = var.env
+  image_uri = var.image_uri
+
+  functions         = local.functions
+  schedules         = merge(local.schedules, local.early_close)
+  schedules_enabled = var.schedules_enabled
+
+  environment = {
+    GTB_ENV    = var.env
+    GTB_BUCKET = module.records.name
   }
-}
-
-resource "aws_s3_bucket_public_access_block" "records" {
-  bucket                  = aws_s3_bucket.records.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "records" {
-  bucket = aws_s3_bucket.records.id
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
+  write_bucket_arns  = [module.records.arn]
+  ssm_write          = true # heartbeat rotates the cTrader token pair
+  log_retention_days = 400  # audit trail
 }

@@ -222,15 +222,15 @@ Daily during demo, weekly in live. Hermes stays in Hermes; nothing of it runs in
 
 | Piece | Choice |
 |---|---|
-| IaC | Terraform (`infra/`) |
+| IaC | Terraform (`infra/`), on the `~/dev/platform` modules (`lambda-app`, `data-bucket`); deployed only by GitHub Actions |
 | Compute | AWS Lambda, **container image** (Docker, **arm64**), Python 3.12, timeout ~6 min, one image with one handler per run |
-| Registry | ECR; Terraform points the functions at the image digest |
+| Registry | ECR repo `gtb` (shared by both envs, tagged with the commit); Terraform points the functions at the image digest |
 | Schedules | EventBridge Scheduler, cron in UTC (minute granularity — second offsets are slept inside the handler) |
 | Storage | S3 bucket, versioning on |
 | Secrets | SSM Parameter Store SecureString: cTrader client id/secret, access + refresh token, account id; Telegram bot token + chat id. The bot refreshes the access token (~30-day lifetime) and writes it back |
-| Monitoring | Lambda error alarms → alert path, plus the S3-based `heartbeat` |
-| Environments | `demo` and `live`: same image, different config (endpoint, account id, risk %, S3 prefix, schedules on/off) |
-| Region | `$AWS_REGION` at deploy time — eu-west-1 (Ireland; latency is irrelevant for 5m bars), Terraform state included (`gtb-terraform-state-<account>-<region>`) |
+| Monitoring | Lambda error alarms → the shared `platform-alarms` topic → Telegram, plus the S3-based `heartbeat` |
+| Environments | `dev` (cTrader demo account) from the `dev` branch and `prod` (live account) from `main`: same code, different config (endpoint, account id, risk %, S3 prefix, schedules on/off) |
+| Region | `$AWS_REGION`, default eu-west-1 (Ireland; latency is irrelevant for 5m bars), Terraform state included (`tfstate-<account>-<region>`, key `gtb/<env>.tfstate`) |
 
 ---
 

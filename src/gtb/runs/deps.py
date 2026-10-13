@@ -53,7 +53,7 @@ class Notifier(Protocol):
 
 @dataclass
 class Deps:
-    env: str                              # "demo" | "live"
+    env: str                              # "dev" | "prod"
     risk: float
     broker: Broker
     store: RecordStore

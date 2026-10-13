@@ -117,7 +117,7 @@ the **Trading** scope to place orders (an "Account info" token gets `TRADE permi
       deals + tick-data spread, record, summary), `watchdog` (from F+1/F+2 min, check every
       30 s until F+4 min).
 - [x] Handler tests with fake broker / S3 / Telegram (time injected, no sleeping in tests).
-- [x] Local runner `scripts/run_local.py <handler> --env demo` for manual runs against demo.
+- [x] Local runner `scripts/run_local.py <handler> --env dev` for manual runs against demo.
 
 **Exit:** each handler run locally against demo produces the expected orders/records/messages;
 duplicate morning run is a no-op.
@@ -162,6 +162,17 @@ five handlers, finds the calendar, and the Lambda emulator resolves a handler fr
 command. Fixed on the way: a morning run started after 09:05 (e.g. a Lambda retry) now records
 `cutoff_missed` instead of placing. `data/early_close.yaml` `future` is still empty.
 
+*Moved onto the platform 2026-10-13* (`~/dev/platform` v0.1.2, its `docs/adoption.md` § gtb).
+`infra/` calls the `lambda-app` and `data-bucket` modules. State is in the shared
+`s3://tfstate-<account>-<region>/gtb/<env>.tfstate`; images go to bootstrap's `gtb` ECR repo,
+tagged with the commit. Deploys run in GitHub Actions only (`.github/workflows/deploy.yml`);
+`scripts/plan.sh <env>` plans locally. The `alarm` function and the
+per-env SNS topic are gone: Lambda error alarms go to the shared `platform-alarms` topic, which
+forwards to Telegram. `infra/early_close.auto.tfvars.json` is committed and checked by a test.
+Environments renamed the same day: `dev` (demo account, `dev` branch) and `prod` (live account,
+`main`, gated by `PROD_ENABLED` and approval). dev is a fresh stack (`gtb-dev-*`); the first
+`gtb-demo-*` stack is decommissioned by hand.
+
 ---
 
 ## Phase 6 — Reconciliation (local)
@@ -173,7 +184,7 @@ command. Fixed on the way: a morning run started after 09:05 (e.g. a Lambda retr
 
 **Exit:** report runs over the first demo days.
 
-*Built 2026-10-11; exit pending demo records.* `uv run python -m reconcile.report --env demo
+*Built 2026-10-11; exit pending demo records.* `uv run python -m reconcile.report --env dev
 [--local] [--end D]`: `aws s3 sync` (or `./local`), `reconcile/hermes_replay.py` run in Hermes'
 venv from `$HERMES_DIR` (variant from 45 days before the first record, account equity, the bot's
 early-close calendar merged in; exports day plans, trades and 09:00–21:00 5m bid bars), then

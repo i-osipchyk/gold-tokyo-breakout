@@ -1,15 +1,16 @@
 # One image for every function; Terraform picks the handler per function
-# (gtb.runs.app.{morning,heartbeat,eod,watchdog,alarm}_handler). Build for arm64:
-#   docker build --platform linux/arm64 --build-arg GIT_SHA=$(git rev-parse HEAD) -t gtb .
-FROM public.ecr.aws/lambda/python:3.12
+# (gtb.runs.app.{morning,heartbeat,eod,watchdog}_handler). CI builds it for arm64:
+#   docker buildx build --platform linux/arm64 --build-arg GIT_SHA=$(git rev-parse HEAD) -t gtb .
 
+FROM public.ecr.aws/lambda/python:3.12 AS build
 COPY --from=ghcr.io/astral-sh/uv:0.11.6 /uv /bin/uv
+WORKDIR /build
 COPY pyproject.toml uv.lock ./
-RUN uv export --frozen --no-dev --no-emit-project --no-hashes -o /tmp/requirements.txt \
-    && uv pip install --no-cache --python /var/lang/bin/python --target "${LAMBDA_TASK_ROOT}" \
-       -r /tmp/requirements.txt \
-    && rm /tmp/requirements.txt pyproject.toml uv.lock
+RUN uv export --frozen --no-dev --no-emit-project --no-hashes -o requirements.txt \
+    && uv pip install --no-cache --python /var/lang/bin/python --target /deps -r requirements.txt
 
+FROM public.ecr.aws/lambda/python:3.12
+COPY --from=build /deps ${LAMBDA_TASK_ROOT}
 COPY data/early_close.yaml ${LAMBDA_TASK_ROOT}/data/early_close.yaml
 COPY src/gtb ${LAMBDA_TASK_ROOT}/gtb
 

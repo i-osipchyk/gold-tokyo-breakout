@@ -28,7 +28,7 @@ def _record(trades=(), **inputs):
              median=18.00, atr=37.25, equity=100_000.0, plan_time=_at(9, 0, 12), attempts=1)
     i.update(inputs)
     return DayRecord(
-        date=DAY, env="demo", code_version="abc", inputs=Inputs(**i),
+        date=DAY, env="dev", code_version="abc", inputs=Inputs(**i),
         decision=Decision(trade=True, reason=None),
         orders=[OrderRecord("buy", 4013.25, 3976.00, 37.25, False, 0.26, _at(20, 5),
                             "gtb-20261012-L", "placed", 1),

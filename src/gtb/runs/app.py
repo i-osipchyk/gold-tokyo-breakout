@@ -15,7 +15,6 @@ from ..alerts.messages import alert_text
 from ..broker import CTraderClient, Tokens, refresh_tokens
 from ..config import Config, Secrets, load_config, load_secrets, ssm_parameters
 from ..records import RecordStore, S3RecordStore
-from .alarm import forward_alarms
 from .deps import Deps, Notifier
 from .eod import eod
 from .heartbeat import TokenKeeper, heartbeat
@@ -88,16 +87,16 @@ RUNS = ("morning", "heartbeat", "eod", "watchdog")
 async def run(name: str, config: Config, secrets: Secrets, *, store: RecordStore,
               notifier: Notifier, clock: SystemClock | None = None,
               tokens: TokenKeeper | None = None) -> None:
-    """Connect, check the account is the kind ``config.env`` says, run handler ``name``."""
+    """Connect, check the account is the kind ``config.env`` trades, run handler ``name``."""
     clock = clock or SystemClock()
     try:
         async with CTraderClient(config.host, client_id=secrets.client_id,
                                  client_secret=secrets.client_secret,
                                  access_token=secrets.access_token,
                                  account_id=secrets.account_id) as client:
-            if await client.is_live() != (config.env == "live"):
-                raise RuntimeError(f"account {secrets.account_id} is not a {config.env} account; "
-                                   "refusing to run")
+            if await client.is_live() != (config.account == "live"):
+                raise RuntimeError(f"account {secrets.account_id} is not a {config.account} "
+                                   f"account, which {config.env} needs; refusing to run")
             deps = Deps(env=config.env, risk=config.risk, broker=client, store=store,
                         notifier=notifier, clock=clock, early_closes=config.early_closes,
                         code_version=config.code_version)
@@ -145,12 +144,3 @@ def eod_handler(event: object, context: object) -> None:
 def watchdog_handler(event: object, context: object) -> None:
     _lambda("watchdog")
 
-
-def alarm_handler(event: dict[str, Any], context: object) -> None:
-    """SNS-subscribed: CloudWatch alarms on the run functions -> Telegram."""
-    import boto3
-
-    config = load_config(os.environ)
-    secrets = load_secrets(ssm_parameters(boto3.client("ssm"), config.ssm_prefix))
-    notifier = TelegramNotifier(secrets.telegram_bot_token, secrets.telegram_chat_id)
-    asyncio.run(forward_alarms(event, notifier, env=config.env))
