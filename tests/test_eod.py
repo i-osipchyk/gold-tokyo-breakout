@@ -53,7 +53,7 @@ def test_an_open_position_is_closed_the_rest_cancelled_and_the_trade_recorded(tm
     assert record.alerts == []
 
     summary = deps.notifier.sent[-1]
-    for fact in ("demo", "2025-02-10", "eod", "1,868.00", "1.87"):
+    for fact in ("dev", "2025-02-10", "eod", "1,868.00", "1.87"):
         assert fact in summary
 
 

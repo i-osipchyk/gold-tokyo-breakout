@@ -32,7 +32,7 @@ def test_trade_day_places_both_stops_and_records_the_plan(tmp_path):
     assert {o.expiry for o in placed} == {DAY + timedelta(hours=20, minutes=5)}
 
     record = deps.store.get(DAY.date())
-    assert (record.env, record.code_version) == ("demo", "abc123")
+    assert (record.env, record.code_version) == ("dev", "abc123")
     i = record.inputs
     assert (i.tokyo_high, i.tokyo_low, i.bars, i.range, i.history_len, i.median, i.atr,
             i.equity) == (2011, 1995, 108, 16, 20, 10, 10, 100_000)
@@ -45,7 +45,7 @@ def test_trade_day_places_both_stops_and_records_the_plan(tmp_path):
     ]
 
     (summary,) = deps.notifier.sent
-    for fact in ("demo", "2025-02-10", "2011.2", "1994.8", "1.0"):
+    for fact in ("dev", "2025-02-10", "2011.2", "1994.8", "1.0"):
         assert fact in summary
 
 

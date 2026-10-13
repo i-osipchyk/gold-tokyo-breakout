@@ -26,7 +26,7 @@ def _at(h, m, s=0):
 
 def _record():
     return DayRecord(
-        date=DAY, env="demo", code_version="abc123",
+        date=DAY, env="dev", code_version="abc123",
         inputs=Inputs(tokyo_high=4012.5, tokyo_low=3990.1, bars=108, range=22.4, history_len=20,
                       median=18.0, atr=37.25, equity=100_000.0, plan_time=_at(9, 0, 14),
                       attempts=1),
@@ -66,12 +66,12 @@ def test_the_s3_store_reads_and_writes_under_env_records_yyyy_mm_dd():
     client, stub = _s3()
     text = _record().to_json()
     stub.add_response("put_object", {}, {
-        "Bucket": "gtb-bucket", "Key": "demo/records/2026/10/12.json", "Body": ANY,
+        "Bucket": "gtb-bucket", "Key": "dev/records/2026/10/12.json", "Body": ANY,
         "ContentType": "application/json"})
     body = StreamingBody(io.BytesIO(text.encode()), len(text.encode()))
     stub.add_response("get_object", {"Body": body},
-                      {"Bucket": "gtb-bucket", "Key": "demo/records/2026/10/12.json"})
-    store = S3RecordStore(client, "gtb-bucket", "demo")
+                      {"Bucket": "gtb-bucket", "Key": "dev/records/2026/10/12.json"})
+    store = S3RecordStore(client, "gtb-bucket", "dev")
 
     with stub:
         store.put(_record())
@@ -84,4 +84,4 @@ def test_the_s3_store_returns_none_for_a_day_without_a_record():
     stub.add_client_error("get_object", service_error_code="NoSuchKey", http_status_code=404)
 
     with stub:
-        assert S3RecordStore(client, "gtb-bucket", "demo").get(DAY) is None
+        assert S3RecordStore(client, "gtb-bucket", "dev").get(DAY) is None

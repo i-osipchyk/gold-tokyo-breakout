@@ -1,7 +1,7 @@
 """Push the run secrets from .env to SSM Parameter Store as SecureStrings under /gtb/<env>/
 (IMPLEMENTATION_PLAN Phase 5). Terraform never holds them.
 
-    AWS_REGION=eu-west-1 uv run python scripts/put_secrets.py --env demo [--dry-run]
+    uv run python scripts/put_secrets.py --env dev [--dry-run]    # AWS_REGION, default eu-west-1
 
 Reads CTRADER_CLIENT_ID, CTRADER_CLIENT_SECRET, CTRADER_ACCESS_TOKEN, CTRADER_REFRESH_TOKEN,
 CTRADER_ACCOUNT_ID, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID. Prints names only, never values. Also
@@ -27,11 +27,11 @@ NAMES = ("ctrader_client_id", "ctrader_client_secret", "ctrader_access_token",
 def main() -> None:
     dotenv.load_dotenv(Path(__file__).parents[1] / ".env")
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", choices=("demo", "live"), required=True)
+    parser.add_argument("--env", choices=("dev", "prod"), required=True)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    region = os.environ.get("AWS_REGION") or sys.exit("set AWS_REGION (e.g. eu-west-1)")
+    region = os.environ.setdefault("AWS_REGION", "eu-west-1")
     values = {n: os.environ.get(n.upper(), "") for n in NAMES}
     missing = [n.upper() for n, v in values.items() if not v]
     if missing:

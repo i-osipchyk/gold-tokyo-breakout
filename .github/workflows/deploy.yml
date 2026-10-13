@@ -1,0 +1,52 @@
+# Deploys after CI passes on a push: the `dev` branch -> dev (cTrader demo account), `main` ->
+# prod (LIVE account).
+# prod is off until dev is validated: it runs only when the repo variable PROD_ENABLED is "true",
+# and its `prod` GitHub Environment has a required reviewer, so it also waits for your click
+# (CLAUDE.md: never deploy prod without an explicit instruction).
+# Repo variables: AWS_ACCOUNT_ID (required), AWS_REGION (optional, default eu-west-1),
+# PROD_ENABLED (unset = prod never deploys). See platform docs/deployment.md.
+# workflow_run always uses this file from the default branch (main), so changes here take effect
+# once they're on main.
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [dev, main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [dev, prod]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  dev:
+    if: >-
+      ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'dev')
+      || (github.event_name == 'workflow_dispatch' && inputs.environment == 'dev') }}
+    uses: i-osipchyk/platform/.github/workflows/lambda-deploy.yml@v0.1.2
+    with:
+      project: gtb
+      environment: dev
+      aws-account-id: ${{ vars.AWS_ACCOUNT_ID }}
+      aws-region: ${{ vars.AWS_REGION || 'eu-west-1' }}
+
+  prod:
+    if: >-
+      ${{ vars.PROD_ENABLED == 'true' && (
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main')
+      || (github.event_name == 'workflow_dispatch' && inputs.environment == 'prod'
+      && github.ref == 'refs/heads/main')) }}
+    uses: i-osipchyk/platform/.github/workflows/lambda-deploy.yml@v0.1.2
+    with:
+      project: gtb
+      environment: prod
+      aws-account-id: ${{ vars.AWS_ACCOUNT_ID }}
+      aws-region: ${{ vars.AWS_REGION || 'eu-west-1' }}

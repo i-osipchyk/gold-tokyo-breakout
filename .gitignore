@@ -223,10 +223,11 @@ __marimo__/
 /local/
 
 # terraform
+# per-env tfvars (the Python ENV/ / env/ rules above would hide them; CI needs them)
+!infra/env/
 infra/.terraform/
 infra/tfplan
 infra/*.tfstate*
-infra/early_close.auto.tfvars.json
 
 # reconcile: synced S3 records
 reconcile/data/

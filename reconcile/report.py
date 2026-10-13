@@ -1,7 +1,7 @@
 """Three-layer reconciliation report (ARCHITECTURE §4.5, IMPLEMENTATION_PLAN Phase 6).
 
-    uv run python -m reconcile.report --env demo              # records from S3 (aws s3 sync)
-    uv run python -m reconcile.report --env demo --local      # records from ./local (run_local)
+    uv run python -m reconcile.report --env dev               # records from S3 (aws s3 sync)
+    uv run python -m reconcile.report --env dev --local       # records from ./local (run_local)
         [--end YYYY-MM-DD] [--hermes-dir ../hermes]
 
 Pulls the DayRecords, replays the Hermes static variant from before the first record (range-history
@@ -24,7 +24,7 @@ from pathlib import Path
 
 import dotenv
 
-from gtb.config import CALENDAR, load_early_closes
+from gtb.config import ACCOUNT, CALENDAR, RISK, load_early_closes
 from gtb.records import DayRecord
 
 from .clocks import edge_clock, execution_clock
@@ -34,7 +34,6 @@ from .replay import Replay
 ROOT = Path(__file__).parents[1]
 FREEZE = date(2026, 10, 11)       # docs/REFERENCE.md: rules frozen, edge clock starts
 WARM_UP = timedelta(days=45)      # >= 20 previous valid Tokyo ranges
-RISK = {"demo": 0.01, "live": 0.0025}
 
 
 def sync(env: str) -> Path:
@@ -42,7 +41,7 @@ def sync(env: str) -> Path:
                               "--output", "text"], check=True, capture_output=True,
                              text=True).stdout.strip()
     target = ROOT / "reconcile" / "data"
-    region = os.environ.get("AWS_REGION") or sys.exit("set AWS_REGION (e.g. eu-west-1)")
+    region = os.environ.get("AWS_REGION", "eu-west-1")
     subprocess.run(["aws", "s3", "sync", "--region", region, "--only-show-errors",
                     f"s3://gtb-{env}-records-{account}/{env}/records/",
                     str(target / env / "records")], check=True)
@@ -113,10 +112,10 @@ def print_report(report: Report, replay: Replay, env: str) -> bool:
     ex = execution_clock(diffs)
     rolling = "—" if ex.rolling_mean is None else f"{ex.rolling_mean:+.3f}"
     print(f"Execution clock ({env}): {ex.trades} trades, rolling-20 mean Δ {rolling} R "
-          f"(limit −0.05)" + ("" if env == "live" else "  [demo: not a kill rule]"))
+          f"(limit −0.05)" + ("" if env == "prod" else f"  [{env}: not a kill rule]"))
     for name, breached in (("DRAWDOWN", edge.drawdown_breached),
                            ("EXPECTANCY", edge.expectancy_breached),
-                           ("EXECUTION", ex.breached and env == "live")):
+                           ("EXECUTION", ex.breached and env == "prod")):
         if breached:
             bad = True
             print(f"!! {name} kill rule breached")
@@ -125,7 +124,7 @@ def print_report(report: Report, replay: Replay, env: str) -> bool:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", choices=sorted(RISK), required=True)
+    parser.add_argument("--env", choices=sorted(ACCOUNT), required=True)
     parser.add_argument("--local", action="store_true", help="records from ./local (run_local)")
     parser.add_argument("--end", type=date.fromisoformat)
     parser.add_argument("--hermes-dir", type=Path,
@@ -143,7 +142,7 @@ def main() -> None:
                         first.inputs.equity)
     print(f"{args.env}: {len(records)} records {first.date} -> {records[-1].date}; "
           f"replay to {end}")
-    report = compare(records, replay, risk=RISK[args.env])
+    report = compare(records, replay, risk=RISK[ACCOUNT[args.env]])
     sys.exit(1 if print_report(report, replay, args.env) else 0)
 
 

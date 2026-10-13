@@ -22,7 +22,7 @@ class RecordStore(Protocol):
 class DirRecordStore:
     """Records as files under ``root`` (local runs), same layout as the S3 keys."""
 
-    def __init__(self, root: Path, env: str = "demo") -> None:
+    def __init__(self, root: Path, env: str = "dev") -> None:
         self.root, self.env = Path(root), env
 
     def _path(self, day: date) -> Path:

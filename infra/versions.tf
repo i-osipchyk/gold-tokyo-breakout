@@ -8,7 +8,8 @@ terraform {
     }
   }
 
-  # Partial config; scripts/deploy.sh passes bucket, key (gtb/<env>.tfstate) and region.
+  # Partial config: bucket (tfstate-<account>-<region>), key (gtb/<env>.tfstate) and region come
+  # from `terraform init -backend-config=...` (CI: platform lambda-deploy; locally: scripts/plan.sh).
   backend "s3" {
     use_lockfile = true
     encrypt      = true
@@ -20,8 +21,10 @@ provider "aws" {
 
   default_tags {
     tags = {
-      project = "gold-tokyo-breakout"
-      env     = var.env
+      project    = var.project
+      env        = var.env
+      managed_by = "terraform"
+      repo       = "i-osipchyk/gold-tokyo-breakout"
     }
   }
 }

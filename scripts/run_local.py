@@ -32,13 +32,13 @@ def main() -> None:
     dotenv.load_dotenv(ROOT / ".env")
     parser = argparse.ArgumentParser()
     parser.add_argument("handler", choices=RUNS)
-    parser.add_argument("--env", choices=("demo", "live"), required=True)
+    parser.add_argument("--env", choices=("dev", "prod"), required=True)
     parser.add_argument("--at", type=time.fromisoformat, metavar="HH:MM[:SS]",
                         help="pretend the run started at this UTC time today")
     args = parser.parse_args()
-    if args.env == "live":
-        raise SystemExit("live runs only from AWS (CLAUDE.md: no live trading without an "
-                         "explicit instruction); use --env demo")
+    if args.env == "prod":
+        raise SystemExit("prod (the live account) runs only from AWS (CLAUDE.md: no live trading "
+                         "without an explicit instruction); use --env dev")
 
     config = load_config({"GTB_ENV": args.env, "GIT_SHA": "local"})
     secrets = load_secrets({k.lower(): v for k, v in os.environ.items()

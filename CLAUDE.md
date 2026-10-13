@@ -32,8 +32,9 @@ Read these before writing code:
 
 ## Safety
 
-- Never place, modify or close orders on the **live** account, or deploy the `live` environment,
-  without an explicit instruction in the current conversation. Demo is fine for smoke tests.
+- Never place, modify or close orders on the **live** account, or deploy the `prod` environment
+  (or set `PROD_ENABLED`), without an explicit instruction in the current conversation. Demo is
+  fine for smoke tests.
 - Check which account `.env` points at before anything that trades (`CTraderClient.is_live()`);
   `scripts/broker_smoke.py` refuses to place orders on a live account.
 - Never print or commit secrets. They live in SSM Parameter Store; locally in an untracked `.env`.
@@ -46,14 +47,31 @@ Read these before writing code:
 uv run pytest                 # offline test suite
 uv run ruff check .           # lint
 uv run python scripts/broker_smoke.py   # real Open API via .env; order round trip on demo only
-uv run python scripts/run_local.py <morning|eod|watchdog|heartbeat> --env demo
+uv run python scripts/run_local.py <morning|eod|watchdog|heartbeat> --env dev
 docker build --platform linux/arm64 -t gtb .
-terraform -chdir=infra plan
+scripts/plan.sh <dev|prod>   # local terraform plan against CI's state; never apply locally
+uv run python scripts/put_secrets.py --env <dev|prod>   # .env -> SSM /gtb/<env>/*
+uv run python -m gtb.schedules > infra/early_close.auto.tfvars.json   # after editing the calendar
 ```
+
+Infra and deployment follow `~/dev/platform` (`lambda-app` / `data-bucket` modules, GitHub
+Actions deploy). Deliberate deviations:
+- **Environments are `dev` and `prod`, one per branch**, not the platform's `demo` / `live` with
+  promotion: a push to `dev` deploys dev (cTrader **demo** account, 1% risk); a push to `main`
+  deploys prod (**live** account, 0.25%), after approval and only while the repo variable
+  `PROD_ENABLED` is `true` (unset until dev is validated). `gtb.config.ACCOUNT` maps env → account
+  kind, and every run refuses an account of the wrong kind. Names, SSM paths, S3 prefixes and
+  records use the env (`gtb-dev-*`, `/gtb/dev/*`, `dev/records/…`); "demo" / "live" mean the
+  broker accounts only.
+- SSM parameter names are snake_case (`/gtb/<env>/ctrader_client_id`), not kebab-case: the
+  heartbeat writes the rotated token pair back under these names, so renaming needs a coordinated
+  re-put of every secret. The app reads them with its own `config.load_secrets`.
+- Functions keep `retries = 2` (every run is idempotent; morning refuses to place after 09:05) and
+  400-day log retention (audit trail).
 
 (Created in Phase 0–5; if a command doesn't exist yet, the plan says which phase adds it.)
 
 ## Gates
 
-Before calling anything done: `uv run pytest` and `uv run ruff check .` pass. Changes to
+Before calling anything done: `uv run pytest`, `uv run ruff check .` and `uv run mypy` pass (CI runs all three). Changes to
 `gtb.core` must keep the Hermes replay test green.
