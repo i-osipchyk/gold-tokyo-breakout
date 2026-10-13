@@ -163,6 +163,10 @@ command. Fixed on the way: a morning run started after 09:05 (e.g. a Lambda retr
 `cutoff_missed` instead of placing. `data/early_close.yaml` `future` is still empty.
 
 *Moved onto the platform 2026-10-13* (`~/dev/platform` v0.1.2, its `docs/adoption.md` § gtb).
+*Shared cTrader tokens 2026-10-13:* runs read `/platform/shared/ctrader-{client-id,client-secret,
+access-token}` on every invocation; the heartbeat's own refresh, `broker/tokens.py`, `ssm_write`
+and the `/gtb/<env>/ctrader_{client_id,client_secret,access_token,refresh_token,
+token_refreshed_at}` parameters are gone (the last ones deleted by hand after the cut-over).
 `infra/` calls the `lambda-app` and `data-bucket` modules. State is in the shared
 `s3://tfstate-<account>-<region>/gtb/<env>.tfstate`; images go to bootstrap's `gtb` ECR repo,
 tagged with the commit. Deploys run in GitHub Actions only (`.github/workflows/deploy.yml`);

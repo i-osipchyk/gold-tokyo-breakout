@@ -142,7 +142,7 @@ Lambda containers).
 Operations: symbol lookup and spec; trendbars (M5, H1) with pagination; reconcile (open positions
 and pending orders); place stop order with absolute SL, expiry, `label` and `clientOrderId`;
 cancel order; close position; deal list for a time range; tick data (bid and ask) for spread at
-fill; token refresh.
+fill. No token refresh: the access token is the account's shared one, rotated by the platform.
 
 Orders are tagged `label = "gtb"`, `clientOrderId = gtb-YYYYMMDD-{L|S}`. The bot only ever touches
 orders and positions with its label.
@@ -168,7 +168,7 @@ offsets apply to that day's flatten time `F` (`eod` at F+5 s, watchdogs F+1 and 
 F+4 min), via one-off schedules generated from `data/early_close.yaml`.
 
 Alerts (Telegram): any run error, cutoff missed, missing heartbeat, `skipped_min_size`, order
-rejected, watchdog had to close something, token refresh failure.
+rejected, watchdog had to close something. (A failed token refresh alarms from the platform's refresher.)
 
 ### 4.4 records — S3
 
@@ -227,7 +227,7 @@ Daily during demo, weekly in live. Hermes stays in Hermes; nothing of it runs in
 | Registry | ECR repo `gtb` (shared by both envs, tagged with the commit); Terraform points the functions at the image digest |
 | Schedules | EventBridge Scheduler, cron in UTC (minute granularity — second offsets are slept inside the handler) |
 | Storage | S3 bucket, versioning on |
-| Secrets | SSM Parameter Store SecureString: cTrader client id/secret, access + refresh token, account id; Telegram bot token + chat id. The bot refreshes the access token (~30-day lifetime) and writes it back |
+| Secrets | SSM Parameter Store SecureString. cTrader client id/secret and access token: the account's shared pair in `/platform/shared/ctrader-*`, refreshed only by the platform's `platform-ctrader-token-refresh` and re-read on every run. Own, under `/gtb/<env>/`: account id, Telegram bot token + chat id |
 | Monitoring | Lambda error alarms → the shared `platform-alarms` topic → Telegram, plus the S3-based `heartbeat` |
 | Environments | `dev` (cTrader demo account) from the `dev` branch and `prod` (live account) from `main`: same code, different config (endpoint, account id, risk %, S3 prefix, schedules on/off) |
 | Region | `$AWS_REGION`, default eu-west-1 (Ireland; latency is irrelevant for 5m bars), Terraform state included (`tfstate-<account>-<region>`, key `gtb/<env>.tfstate`) |
@@ -253,7 +253,7 @@ Each run recomputes from the broker; no state is carried between runs.
 | morning run fires twice | duplicate orders | idempotent by `clientOrderId` |
 | 08:55 bar not yet available at 09:00:10 | — | retry every 15 s to 09:05:00 |
 | **flatten fails** | position held overnight (Friday: over the weekend) | retries in `eod`, two watchdogs re-checking every 30 s from 20:51 to 20:54, alert on the first failed attempt → manual close before 20:55 |
-| token expired / refresh fails | runs can't trade | alert on refresh failure, well before expiry |
+| token expired / refresh fails | runs can't trade | the platform refresher alarms to `platform-alarms` well before expiry; a run with a dead token fails auth and alerts |
 | broker rejects an order (margin, invalid level) | no trade | alert; recorded |
 | size floors below 0.01 lot | no trade | `skipped_min_size` + alert; fund the account so it is rare |
 | early-close day missing from calendar | position open into the early close | calendar reviewed yearly; covered by unit test |

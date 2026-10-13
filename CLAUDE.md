@@ -63,9 +63,10 @@ Actions deploy). Deliberate deviations:
   kind, and every run refuses an account of the wrong kind. Names, SSM paths, S3 prefixes and
   records use the env (`gtb-dev-*`, `/gtb/dev/*`, `dev/records/…`); "demo" / "live" mean the
   broker accounts only.
-- SSM parameter names are snake_case (`/gtb/<env>/ctrader_client_id`), not kebab-case: the
-  heartbeat writes the rotated token pair back under these names, so renaming needs a coordinated
-  re-put of every secret. The app reads them with its own `config.load_secrets`.
+- The app's own SSM parameter names are snake_case (`/gtb/<env>/ctrader_account_id`,
+  `telegram_*`), not kebab-case; renaming them needs a coordinated re-put. The cTrader client
+  id/secret and token are the platform's shared pair (`/platform/shared/ctrader-*`, kebab-case),
+  re-read on every run and never refreshed or copied by gtb. `config.load_secrets` reads both.
 - Functions keep `retries = 2` (every run is idempotent; morning refuses to place after 09:05) and
   400-day log retention (audit trail).
 

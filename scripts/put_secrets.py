@@ -3,10 +3,10 @@
 
     uv run python scripts/put_secrets.py --env dev [--dry-run]    # AWS_REGION, default eu-west-1
 
-Reads CTRADER_CLIENT_ID, CTRADER_CLIENT_SECRET, CTRADER_ACCESS_TOKEN, CTRADER_REFRESH_TOKEN,
-CTRADER_ACCOUNT_ID, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID. Prints names only, never values. Also
-stamps ctrader_token_refreshed_at = now, so the heartbeat's first refresh is a week out; after it
-rotates the pair, the copy in .env is stale (fetch the new one from SSM for local runs).
+Reads CTRADER_ACCOUNT_ID, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID. Prints names only, never values.
+The cTrader client id/secret and token pair are not ours: they are the account's shared pair in
+/platform/shared/ctrader-*, seeded once and rotated by the platform (~/dev/platform
+docs/conventions.md § Secrets).
 """
 
 from __future__ import annotations
@@ -14,14 +14,12 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 
 import boto3
 import dotenv
 
-NAMES = ("ctrader_client_id", "ctrader_client_secret", "ctrader_access_token",
-         "ctrader_refresh_token", "ctrader_account_id", "telegram_bot_token", "telegram_chat_id")
+NAMES = ("ctrader_account_id", "telegram_bot_token", "telegram_chat_id")
 
 
 def main() -> None:
@@ -44,11 +42,6 @@ def main() -> None:
         if not args.dry_run:
             ssm.put_parameter(Name=prefix + name, Value=value, Type="SecureString",
                               Overwrite=True)
-    stamp = datetime.now(UTC).isoformat()
-    print(f"{'would put' if args.dry_run else 'put'} {prefix}ctrader_token_refreshed_at = {stamp}")
-    if not args.dry_run:
-        ssm.put_parameter(Name=prefix + "ctrader_token_refreshed_at", Value=stamp, Type="String",
-                          Overwrite=True)
 
 
 if __name__ == "__main__":

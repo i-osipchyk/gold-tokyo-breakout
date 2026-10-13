@@ -37,16 +37,24 @@ def test_an_unknown_environment_is_refused(env):
         load_config({"GTB_ENV": env}, calendar=CALENDAR)
 
 
-def test_secrets_come_from_parameters_named_like_the_env_file_in_lower_case():
-    secrets = load_secrets({
-        "ctrader_client_id": "app", "ctrader_client_secret": "s3cret",
-        "ctrader_access_token": "tok", "ctrader_refresh_token": "ref",
-        "ctrader_account_id": "46585934", "telegram_bot_token": "1:abc",
-        "telegram_chat_id": "-100"})
+def test_ctrader_credentials_come_from_the_shared_pair_and_the_rest_from_the_app():
+    secrets = load_secrets(
+        {"ctrader_account_id": "46585934", "telegram_bot_token": "1:abc",
+         "telegram_chat_id": "-100",
+         "ctrader_client_id": "stale", "ctrader_access_token": "stale"},   # old own copy: ignored
+        {"ctrader-client-id": "app", "ctrader-client-secret": "s3cret",
+         "ctrader-access-token": "tok", "ctrader-refresh-token": "ref",
+         "langfuse-secret-key": "other"})
 
-    assert (secrets.client_id, secrets.account_id, secrets.telegram_chat_id) == (
-        "app", 46585934, "-100")
+    assert (secrets.client_id, secrets.access_token, secrets.account_id,
+            secrets.telegram_chat_id) == ("app", "tok", 46585934, "-100")
     assert "s3cret" not in repr(secrets) and "tok" not in repr(secrets)
+
+
+def test_without_the_shared_pair_a_run_refuses_to_start():
+    with pytest.raises(KeyError, match="ctrader-access-token"):
+        load_secrets({"ctrader_account_id": "46585934"},
+                     {"ctrader-client-id": "app", "ctrader-client-secret": "s3cret"})
 
 
 def test_ssm_parameters_are_read_decrypted_by_path_and_keyed_by_short_name():

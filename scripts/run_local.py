@@ -2,12 +2,14 @@
 
     uv run python scripts/run_local.py <morning|eod|watchdog|heartbeat> --env demo [--at HH:MM]
 
-Secrets come from .env (CTRADER_*, optional TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID). Records go to
+The cTrader credentials and token are the shared pair in SSM (/platform/shared/ctrader-*, read
+with your AWS credentials; AWS_REGION, default eu-west-1); CTRADER_ACCOUNT_ID and optional
+TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID come from .env. Records go to
 ./local/<env>/records/YYYY/MM/DD.json; messages go to Telegram when .env has its token, otherwise
 they are printed. ``--at`` shifts the run's clock so it behaves as if started at that UTC time
 today (e.g. ``eod --at 20:50`` to flatten now instead of waiting); waits inside the run are real.
 Refuses to run when the account's live/demo status doesn't match ``--env``; the token is never
-refreshed from here.
+refreshed from here (only the platform's refresher does that).
 """
 
 from __future__ import annotations
@@ -18,10 +20,11 @@ import os
 from datetime import UTC, datetime, time
 from pathlib import Path
 
+import boto3
 import dotenv
 
 from gtb.alerts import TelegramNotifier
-from gtb.config import load_config, load_secrets
+from gtb.config import SHARED_PREFIX, load_config, load_secrets, ssm_parameters
 from gtb.records import DirRecordStore
 from gtb.runs.app import RUNS, PrintNotifier, SystemClock, run
 
@@ -41,8 +44,10 @@ def main() -> None:
                          "without an explicit instruction); use --env dev")
 
     config = load_config({"GTB_ENV": args.env, "GIT_SHA": "local"})
+    os.environ.setdefault("AWS_REGION", "eu-west-1")
     secrets = load_secrets({k.lower(): v for k, v in os.environ.items()
-                            if k.startswith(("CTRADER_", "TELEGRAM_"))})
+                            if k.startswith(("CTRADER_", "TELEGRAM_"))},
+                           ssm_parameters(boto3.client("ssm"), SHARED_PREFIX))
     clock = SystemClock()
     if args.at is not None:
         now = datetime.now(UTC)

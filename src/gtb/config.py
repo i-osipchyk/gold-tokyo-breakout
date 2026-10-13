@@ -1,6 +1,8 @@
 """Run configuration (ARCHITECTURE §5): dev|prod settings from the environment, secrets from SSM
-Parameter Store (``/gtb/<env>/<name>``) -- or, locally, from .env under the same names in upper
-case (``CTRADER_CLIENT_ID`` <-> ``ctrader_client_id``)."""
+Parameter Store. The cTrader app credentials and token pair are the account's shared ones
+(``/platform/shared/ctrader-*``, rotated by the platform, never by us); the rest is the app's own
+(``/gtb/<env>/<name>`` -- or, locally, .env under the same names in upper case:
+``CTRADER_ACCOUNT_ID`` <-> ``ctrader_account_id``)."""
 
 from __future__ import annotations
 
@@ -19,6 +21,7 @@ ACCOUNT = {"dev": "demo", "prod": "live"}
 RISK = {"demo": 0.01, "live": 0.0025}           # ARCHITECTURE §2, §8 -- frozen
 HOST = {"demo": DEMO_HOST, "live": LIVE_HOST}
 CALENDAR = Path(__file__).parents[2] / "data" / "early_close.yaml"
+SHARED_PREFIX = "/platform/shared/"     # the lambda-app module's SHARED_SECRETS_PATH
 
 
 @dataclass(frozen=True)
@@ -67,17 +70,17 @@ class Secrets:
     client_id: str
     client_secret: str = field(repr=False)
     access_token: str = field(repr=False)
-    refresh_token: str = field(repr=False)
     account_id: int
     telegram_bot_token: str = field(repr=False)
     telegram_chat_id: str
 
 
-def load_secrets(params: Mapping[str, str]) -> Secrets:
+def load_secrets(params: Mapping[str, str], shared: Mapping[str, str]) -> Secrets:
+    """``params``: the app's own (``/gtb/<env>/``); ``shared``: ``/platform/shared/``. Read both
+    on every invocation: after the platform refreshes the pair, the old access token is dead."""
     return Secrets(
-        client_id=params["ctrader_client_id"], client_secret=params["ctrader_client_secret"],
-        access_token=params["ctrader_access_token"],
-        refresh_token=params.get("ctrader_refresh_token", ""),
+        client_id=shared["ctrader-client-id"], client_secret=shared["ctrader-client-secret"],
+        access_token=shared["ctrader-access-token"],
         account_id=int(params["ctrader_account_id"]),
         telegram_bot_token=params.get("telegram_bot_token", ""),
         telegram_chat_id=params.get("telegram_chat_id", ""))
